@@ -1322,13 +1322,6 @@ if test "$with_zstd" = yes; then
 fi
 
 #
-# quicklz
-#
-PGAC_ARG_BOOL(with, quicklz, no,
-              [build with QuickLZ support (requires quicklz library)])
-AC_SUBST(with_quicklz)
-
-#
 # Realtime library
 #
 PGAC_ARG_BOOL(with, rt, yes,
@@ -1576,16 +1569,6 @@ if test "$with_zlib" = yes; then
 If you have zlib already installed, see config.log for details on the
 failure.  It is possible the compiler isn't looking in the proper directory.
 Use --without-zlib to disable zlib support.])])
-fi
-
-if test "$with_quicklz" = yes; then
-  AC_CHECK_LIB(quicklz, qlz_compress, [],
-               [AC_MSG_ERROR([quicklz library not found.])])
-fi
-
-if test "$enable_external_fts" = yes; then
-AC_CHECK_LIB(jansson, jansson_version_str, [],
-               [AC_MSG_ERROR([jansson library not found or version is too old, version must >= 2.13])])
 fi
 
 if test "$enable_ic_proxy" = yes; then
@@ -1944,11 +1927,6 @@ fi
 # Check for bzlib.h
 if test "$with_libbz2" = yes ; then
   AC_CHECK_HEADER(bzlib.h, [], [AC_MSG_ERROR([header file <bzlib.h> is required for bzip2 support])], [])
-fi
-
-# Check for quicklz.h
-if test "$with_quicklz" = yes; then
-  AC_CHECK_HEADER(quicklz.h, [], [AC_MSG_ERROR([header file <quicklz.h> is required for QuickLZ support])])
 fi
 
 if test "$enable_external_fts" = yes; then

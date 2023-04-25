@@ -719,7 +719,6 @@ GREP
 with_apr_config
 with_libcurl
 with_rt
-with_quicklz
 with_zstd
 with_libbz2
 LZ4_LIBS
@@ -847,7 +846,6 @@ infodir
 docdir
 oldincludedir
 includedir
-runstatedir
 localstatedir
 sharedstatedir
 sysconfdir
@@ -935,7 +933,6 @@ with_zlib
 with_lz4
 with_libbz2
 with_zstd
-with_quicklz
 with_rt
 with_libcurl
 with_apr_config
@@ -1017,7 +1014,6 @@ datadir='${datarootdir}'
 sysconfdir='${prefix}/etc'
 sharedstatedir='${prefix}/com'
 localstatedir='${prefix}/var'
-runstatedir='${localstatedir}/run'
 includedir='${prefix}/include'
 oldincludedir='/usr/include'
 docdir='${datarootdir}/doc/${PACKAGE_TARNAME}'
@@ -1270,15 +1266,6 @@ do
   | -silent | --silent | --silen | --sile | --sil)
     silent=yes ;;
 
-  -runstatedir | --runstatedir | --runstatedi | --runstated \
-  | --runstate | --runstat | --runsta | --runst | --runs \
-  | --run | --ru | --r)
-    ac_prev=runstatedir ;;
-  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
-  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
-  | --run=* | --ru=* | --r=*)
-    runstatedir=$ac_optarg ;;
-
   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
     ac_prev=sbindir ;;
   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
@@ -1416,7 +1403,7 @@ fi
 for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
 		datadir sysconfdir sharedstatedir localstatedir includedir \
 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
-		libdir localedir mandir runstatedir
+		libdir localedir mandir
 do
   eval ac_val=\$$ac_var
   # Remove trailing slashes.
@@ -1569,7 +1556,6 @@ Fine tuning of the installation directories:
   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
-  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
   --libdir=DIR            object code libraries [EPREFIX/lib]
   --includedir=DIR        C header files [PREFIX/include]
   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
@@ -1689,8 +1675,6 @@ Optional Packages:
   --with-lz4              build with LZ4 support
   --without-libbz2        do not use bzip2
   --without-zstd          do not build with Zstandard
-  --with-quicklz          build with QuickLZ support (requires quicklz
-                          library)
   --without-rt            do not use Realtime Library
   --without-libcurl       do not use libcurl
   --with-apr-config=PATH  path to apr-1-config utility
@@ -10891,35 +10875,6 @@ fi
 fi
 
 #
-# quicklz
-#
-
-
-
-# Check whether --with-quicklz was given.
-if test "${with_quicklz+set}" = set; then :
-  withval=$with_quicklz;
-  case $withval in
-    yes)
-      :
-      ;;
-    no)
-      :
-      ;;
-    *)
-      as_fn_error $? "no argument expected for --with-quicklz option" "$LINENO" 5
-      ;;
-  esac
-
-else
-  with_quicklz=no
-
-fi
-
-
-
-
-#
 # Realtime library
 #
 
@@ -14539,106 +14494,6 @@ fi
 
 fi
 
-if test "$with_quicklz" = yes; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for qlz_compress in -lquicklz" >&5
-$as_echo_n "checking for qlz_compress in -lquicklz... " >&6; }
-if ${ac_cv_lib_quicklz_qlz_compress+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lquicklz  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char qlz_compress ();
-int
-main ()
-{
-return qlz_compress ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_quicklz_qlz_compress=yes
-else
-  ac_cv_lib_quicklz_qlz_compress=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_quicklz_qlz_compress" >&5
-$as_echo "$ac_cv_lib_quicklz_qlz_compress" >&6; }
-if test "x$ac_cv_lib_quicklz_qlz_compress" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBQUICKLZ 1
-_ACEOF
-
-  LIBS="-lquicklz $LIBS"
-
-else
-  as_fn_error $? "quicklz library not found." "$LINENO" 5
-fi
-
-fi
-
-if test "$enable_external_fts" = yes; then
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for jansson_version_str in -ljansson" >&5
-$as_echo_n "checking for jansson_version_str in -ljansson... " >&6; }
-if ${ac_cv_lib_jansson_jansson_version_str+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-ljansson  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char jansson_version_str ();
-int
-main ()
-{
-return jansson_version_str ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_jansson_jansson_version_str=yes
-else
-  ac_cv_lib_jansson_jansson_version_str=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_jansson_jansson_version_str" >&5
-$as_echo "$ac_cv_lib_jansson_jansson_version_str" >&6; }
-if test "x$ac_cv_lib_jansson_jansson_version_str" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBJANSSON 1
-_ACEOF
-
-  LIBS="-ljansson $LIBS"
-
-else
-  as_fn_error $? "jansson library not found or version is too old, version must >= 2.13" "$LINENO" 5
-fi
-
-fi
-
 if test "$enable_ic_proxy" = yes; then
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for uv_default_loop in -luv" >&5
 $as_echo_n "checking for uv_default_loop in -luv... " >&6; }
@@ -16838,18 +16693,6 @@ fi
 
 fi
 
-# Check for quicklz.h
-if test "$with_quicklz" = yes; then
-  ac_fn_c_check_header_mongrel "$LINENO" "quicklz.h" "ac_cv_header_quicklz_h" "$ac_includes_default"
-if test "x$ac_cv_header_quicklz_h" = xyes; then :
-
-else
-  as_fn_error $? "header file <quicklz.h> is required for QuickLZ support" "$LINENO" 5
-fi
-
-
-fi
-
 if test "$enable_external_fts" = yes; then
 # Check for jansson
 ac_fn_c_check_header_mongrel "$LINENO" "jansson.h" "ac_cv_header_jansson_h" "$ac_includes_default"
@@ -18442,7 +18285,7 @@ else
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -18488,7 +18331,7 @@ else
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -18512,7 +18355,7 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -18557,7 +18400,7 @@ else
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
@@ -18581,7 +18424,7 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
     We can't simply define LARGE_OFF_T to be 9223372036854775807,
     since some C++ compilers masquerading as C compilers
     incorrectly reject 9223372036854775807.  */
-#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + (((off_t) 1 << 31) << 31))
+#define LARGE_OFF_T (((off_t) 1 << 62) - 1 + ((off_t) 1 << 62))
   int off_t_is_large[(LARGE_OFF_T % 2147483629 == 721
 		       && LARGE_OFF_T % 2147483647 == 1)
 		      ? 1 : -1];
