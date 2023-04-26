@@ -453,8 +453,10 @@ bool		gp_enable_segment_copy_checking = true;
  */
 char	   *gp_default_storage_options = NULL;
 
+/* Fall back to using zstd if quicklz compresstpye specified */
+bool		gp_quicklz_fallback = false;
 
-int			writable_external_table_bufsize = 1024;
+int			writable_external_table_bufsize = 64;
 
 bool		gp_external_enable_filter_pushdown = true;
 
@@ -3317,34 +3319,12 @@ struct config_bool ConfigureNamesBool_gp[] =
 		false,
 		NULL, NULL, NULL
 	},
-
 	{
-		{"gp_enable_refresh_fast_path", PGC_USERSET, QUERY_TUNING_METHOD,
-			gettext_noop("Avoid do a real REFRESH materialized view if possibile."),
-			NULL
+		{"gp_quicklz_fallback", PGC_SUSET, APPENDONLY_TABLES,
+		 gettext_noop("Fallback to valid compression type if quicklz table compression is requested."),
+		 NULL,
 		},
-		&gp_enable_refresh_fast_path,
-		true,
-		NULL, NULL, NULL
-	},
-
-	{
-		{"gp_detect_data_correctness", PGC_USERSET, UNGROUPED,
-		gettext_noop("Detect if the current partitioning of the table or data distribution is correct."),
-		NULL,
-		GUC_NO_SHOW_ALL | GUC_NOT_IN_SAMPLE
-		},
-		&gp_detect_data_correctness,
-		false,
-		NULL, NULL, NULL
-	},
-
-	{
-		{"gp_enable_runtime_filter_pushdown", PGC_USERSET, DEVELOPER_OPTIONS,
-			gettext_noop("Try to push the hash table of hash join to the seqscan or AM as bloom filter."),
-			NULL
-		},
-		&gp_enable_runtime_filter_pushdown,
+		&gp_quicklz_fallback,
 		false,
 		NULL, NULL, NULL
 	},
