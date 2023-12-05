@@ -741,7 +741,8 @@ extern PGresult *pqFunctionCall2(PGconn *conn, Oid fnid,
 								 int result_is_int,
 								 const PQArgBlock *args, int nargs);
 
-extern void pqCommandQueueAdvance(PGconn *conn);
+extern void pqCommandQueueAdvance(PGconn *conn, bool isReadyForQuery,
+								  bool gotSync);
 extern int	PQsendQueryContinue(PGconn *conn, const char *query);
 extern PGresult *PQnfn(PGconn *conn, int fnid, int *result_buf, int buf_size,
 					   int *result_len, int result_is_int,
