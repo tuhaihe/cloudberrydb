@@ -2,6 +2,8 @@
 -- Tests of Answer Query Using Materialized Views.
 --
 set optimizer = off;
+create schema aqumv;
+set search_path to aqumv;
 create table aqumv_t1(c1 int, c2 int, c3 int) distributed by (c1);
 insert into aqumv_t1 select i, i+1, i+2 from generate_series(1, 1000) i;
 insert into aqumv_t1 select * from aqumv_t1;
@@ -407,6 +409,16 @@ select c1, c3, avg(c2) from aqumv_t4 where c1 > 90 group by (c1, c3) having avg(
 explain(costs off, verbose)
 select c1, c3, avg(c2) from aqumv_t4 where c1 > 90 group by (c1, c3) having c1 > 90;
 
+-- having quals without column reference.
+explain(costs off, verbose)
+select c1, c3, avg(c2) from aqumv_t4 where c1 > 90 group by (c1, c3) having 2 > 1;
+
+-- origin query have mutable functions can not use AQUMV.
+explain(costs off, verbose)
+select c1, c3, avg(c2) from aqumv_t4 where c1 > 90 group by (c1, c3) having random() > 0.5;
+explain(costs off, verbose)
+select c1, c3, avg(c2), random() from aqumv_t4 where c1 > 90 group by (c1, c3);
+
 abort;
 
 -- Test Order By of origin query.
@@ -527,7 +539,61 @@ select distinct on(c1 - 1) c1, c2 from aqumv_t6 where c1 > 90 order by c1 - 1, c
 \pset null ''
 abort;
 
+-- Test LIMIT
+begin;
+create table aqumv_t7(c1 int, c2 int, c3 int, c4 int) distributed by (c1);
+insert into aqumv_t7 select i, i+1, i+2, i+3 from generate_series(1, 100) i;
+insert into aqumv_t7 select i, i+1, i+2, i+3 from generate_series(1, 100) i;
+analyze aqumv_t7;
+
+create incremental materialized view aqumv_mvt7_0 as
+  select c3 as cm3, c1 as mc1, c2 as mc2
+  from aqumv_t7 where c1 > 90;
+analyze aqumv_mvt7_0;
+
+-- LIMIT
+set local enable_answer_query_using_materialized_views = off;
+explain(costs off, verbose)
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 limit 3;
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 limit 3;
+set local enable_answer_query_using_materialized_views = on;
+explain(costs off, verbose)
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 limit 3;
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 limit 3;
+
+-- OFFSET
+set local enable_answer_query_using_materialized_views = off;
+explain(costs off, verbose)
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 limit 3 offset 4;
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 limit 3 offset 4;
+set local enable_answer_query_using_materialized_views = on;
+explain(costs off, verbose)
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 limit 3 offset 4;
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 limit 3 offset 4;
+
+-- FETCH
+set local enable_answer_query_using_materialized_views = off;
+explain(costs off, verbose)
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 fetch first 3 rows only;
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 fetch first 3 rows only;
+set local enable_answer_query_using_materialized_views = on;
+explain(costs off, verbose)
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 fetch first 3 rows only;
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 fetch first 3 rows only;
+
+-- WITH TIES
+set local enable_answer_query_using_materialized_views = off;
+explain(costs off, verbose)
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 fetch first 3 rows with ties;
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 fetch first 3 rows with ties;
+set local enable_answer_query_using_materialized_views = on;
+explain(costs off, verbose)
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 fetch first 3 rows with ties;
+select c2, c3 from aqumv_t7 where c1 > 90 order by c2, c3 fetch first 3 rows with ties;
+
+abort;
 
 reset optimizer;
 reset enable_answer_query_using_materialized_views;
 drop table aqumv_t1 cascade;
+reset search_path;

@@ -22,6 +22,7 @@
 #include "catalog/pg_inherits.h"
 #include "catalog/pg_rewrite.h"
 #include "cdb/cdbllize.h"
+#include "optimizer/aqumv.h"
 #include "optimizer/optimizer.h"
 #include "optimizer/planmain.h"
 #include "optimizer/planner.h"
@@ -50,6 +51,7 @@ typedef struct
 	int 	varno;
 } aqumv_adjust_varno_context;
 
+extern void aqumv_adjust_simple_query(Query *viewQuery);
 static bool aqumv_process_from_quals(Node *query_quals, Node *mv_quals, List** post_quals);
 static void aqumv_adjust_varno(Query *parse, int delta);
 static Node *aqumv_adjust_varno_mutator(Node *node, aqumv_adjust_varno_context *context);
@@ -92,7 +94,6 @@ answer_query_using_materialized_views(PlannerInfo *root,
 	Query   		*parse = root->parse; /* Query of origin SQL. */
 	Query			*viewQuery; /* Query of view. */
 	RelOptInfo 		*mv_final_rel = current_rel; /* Final rel after rewritten. */
-	ListCell 		*lc;
 	Node    		*jtnode;
 	Node			*mvjtnode;
 	int				varno;
@@ -122,6 +123,7 @@ answer_query_using_materialized_views(PlannerInfo *root,
 						  parse->hasModifyingCTE ||
 						  (parse->parentStmtType == PARENTSTMTTYPE_REFRESH_MATVIEW) ||
 						  (parse->parentStmtType == PARENTSTMTTYPE_CTAS) ||
+						  (contain_mutable_functions((Node *) parse)) ||
 						  parse->hasSubLinks;
 
 	if (can_not_use_mv)
@@ -209,6 +211,7 @@ answer_query_using_materialized_views(PlannerInfo *root,
 			viewQuery->hasDistinctOn ||
 			viewQuery->hasModifyingCTE ||
 			viewQuery->hasSubLinks ||
+			(limit_needed(viewQuery)) ||
 			(viewQuery->groupClause != NIL) ||
 			/* IVM doesn't support belows now, just in case. */
 			(viewQuery->rowMarks != NIL) ||
@@ -262,34 +265,15 @@ answer_query_using_materialized_views(PlannerInfo *root,
 		subroot->parse = viewQuery;
 
 		/*
-		 * AQUMV
-		 * We have to rewrite now before we do the real Equivalent
-		 * Transformation 'rewrite'.  
-		 * Because actions sotored in rule is not a normal query tree,
-		 * it can't be used directly, ex: new/old realtions used to
-		 * refresh mv.
-		 * Earse unused relatoins, keep the right one.
+		 * AQUMV_FIXME:
+		 * We copy from root currently, but it's not true
+		 * if we support LIMIT node on view query.
 		 */
-		foreach(lc, viewQuery->rtable)
-		{
-			RangeTblEntry* rtetmp = lfirst(lc);
-			if ((rtetmp->relkind == RELKIND_MATVIEW) &&
-				(rtetmp->alias != NULL) &&
-				(strcmp(rtetmp->alias->aliasname, "new") == 0 ||
-				strcmp(rtetmp->alias->aliasname,"old") == 0))
-			{
-				foreach_delete_current(viewQuery->rtable, lc);
-			}
-		}
+		subroot->tuple_fraction = root->tuple_fraction;
+		subroot->limit_tuples = root->limit_tuples;
 
-		/*
-		 * Now we have the right relation, adjust
-		 * varnos in its query tree.
-		 * AQUMV_FIXME_MVP: Only one single relation
-		 * is supported now, we could assign varno
-		 * to 1 opportunistically.
-		 */
-		aqumv_adjust_varno(viewQuery, 1);
+		/* Adjust to valid query tree and fix varno after rewrite.*/
+		aqumv_adjust_simple_query(viewQuery);
 
 		/*
 		 * AQUMV_FIXME_MVP
@@ -345,6 +329,9 @@ answer_query_using_materialized_views(PlannerInfo *root,
 		viewQuery->groupingSets = parse->groupingSets;
 		viewQuery->sortClause = parse->sortClause;
 		viewQuery->distinctClause = parse->distinctClause;
+		viewQuery->limitOption = parse->limitOption;
+		viewQuery->limitCount = parse->limitCount;
+		viewQuery->limitOffset = parse->limitOffset;
 
 		/*
 		 * AQUMV
@@ -398,7 +385,6 @@ answer_query_using_materialized_views(PlannerInfo *root,
 		 * We don't use STD_FUZZ_FACTOR for cost comparisons like compare_path_costs_fuzzily here.
 		 * The STD_FUZZ_FACTOR is used to reduce paths of a rel, and keep the significantly ones.
 		 * But in AQUMV, we always have only one best path of rel at the last to compare.
-		 * TODO: limit clause and startup_cost.
 		 */
 		if (mv_final_rel->cheapest_total_path->total_cost < current_rel->cheapest_total_path->total_cost)
 		{
@@ -475,6 +461,10 @@ aqumv_init_context(List *view_tlist, TupleDesc mv_tupledesc)
 		if (tle->resjunk)
 			continue;
 
+		/* Avoid expression has no Vars. */
+		if(!contain_var_clause((Node*)tle))
+			continue;
+
 		if (IsA(tle->expr, Var))
 			mv_pure_vars_index = lappend_int(mv_pure_vars_index, i);
 		else
@@ -487,77 +477,6 @@ aqumv_init_context(List *view_tlist, TupleDesc mv_tupledesc)
 	context->mv_query_tlist = view_tlist;
 	context->has_unmatched = false;
 	return context;
-}
-
-/*
- * Process varno after we eliminate mv's actions("old" and "new" relation)
- * Correct rindex and all varnos with a delta.
- *
- * MV's actions query tree:
- *		[rtable]
- *				RangeTblEntry [rtekind=RTE_RELATION]
- *						[alias] Alias [aliasname="old"]
- *				RangeTblEntry [rtekind=RTE_RELATION]
- *						[alias] Alias [aliasname="new"]
- *				RangeTblEntry [rtekind=RTE_RELATION]
- *		[jointree]
- *				FromExpr []
- *						[fromlist]
- *								RangeTblRef [rtindex=3]
- *		[targetList]
- *				TargetEntry [resno=1 resname="c1"]
- *						Var [varno=3 varattno=1]
- *				TargetEntry [resno=2 resname="c2"]
- *						Var [varno=3 varattno=2]
- *------------------------------------------------------------------------------------------
- * MV's query tree after rewrite:
- *		[rtable]
- *				RangeTblEntry [rtekind=RTE_RELATION]
- *		[jointree]
- *				FromExpr []
- *						[fromlist]
- *								RangeTblRef [rtindex=3]
- *		[targetList]
- *				TargetEntry [resno=1 resname="c1"]
- *						Var [varno=3 varattno=1]
- *				TargetEntry [resno=2 resname="c2"]
- *						Var [varno=3 varattno=2]
- *------------------------------------------------------------------------------------------
- * MV's query tree after varno adjust:
- *		[rtable]
- *				RangeTblEntry [rtekind=RTE_RELATION]
- *		[jointree]
- *				FromExpr []
- *						[fromlist]
- *								RangeTblRef [rtindex=1]
- *		[targetList]
- *				TargetEntry [resno=1 resname="c1"]
- *						Var [varno=1 varattno=1]
- *				TargetEntry [resno=2 resname="c2"]
- *						Var [varno=1 varattno=2]
- *
- */
-static void
-aqumv_adjust_varno(Query* parse, int varno)
-{
-	aqumv_adjust_varno_context context;
-	context.varno = varno;
-	parse = query_tree_mutator(parse, aqumv_adjust_varno_mutator, &context, QTW_DONT_COPY_QUERY);
-}
-
-/* 
- * Adjust varno and rindex with delta. 
- */ 
-static Node *aqumv_adjust_varno_mutator(Node *node, aqumv_adjust_varno_context *context)
-{
-	if (node == NULL)
-		return NULL;
-	if (IsA(node, Var))
-		((Var *)node)->varno = context->varno;
-	else if (IsA(node, RangeTblRef))
- 		/* AQUMV_FIXME_MVP: currently we have only one relation */
-		((RangeTblRef*) node)->rtindex = context->varno;
-	return expression_tree_mutator(node, aqumv_adjust_varno_mutator, context);
 }
 
 /*
@@ -719,16 +638,10 @@ static Node *aqumv_adjust_sub_matched_expr_mutator(Node *node, aqumv_equivalent_
 	/*
 	 * We didn't find matched nonpure-Var expr.
 	 * And if expr doesn't have Vars, return it to upper.
+	 * Keep TargetEntry expr no changed in case for count(*).
 	 */
-	List	*expr_vars = pull_var_clause((Node *)node_expr,
-									 PVC_RECURSE_AGGREGATES |
-									 PVC_RECURSE_WINDOWFUNCS |
-									 PVC_INCLUDE_PLACEHOLDERS);
-
-	/* Keep TargetEntry expr no changed in case for count(*). */
-	if (expr_vars == NIL)
+	if (!contain_var_clause((Node *)node_expr))
 		return is_targetEntry ? node : (Node *)node_expr;
-	list_free(expr_vars);
 	
 	/* Try match with mv_pure_vars_index, but do not disturb already rewrited exprs(Var->location = -2)  */
 	if (IsA(node_expr, Var))
@@ -800,4 +713,109 @@ aqumv_process_targetlist(aqumv_equivalent_transformation_context *context, List 
 		pfree(*mv_final_tlist);
 	
 	return !context->has_unmatched;
+}
+
+void aqumv_adjust_simple_query(Query *viewQuery)
+{
+	ListCell *lc;
+	/*
+	 * AQUMV
+	 * We have to rewrite now before we do the real Equivalent
+	 * Transformation 'rewrite'.
+	 * Because actions sotored in rule is not a normal query tree,
+	 * it can't be used directly, ex: new/old realtions used to
+	 * refresh mv.
+	 * Earse unused relatoins, keep the right one.
+	 */
+	foreach (lc, viewQuery->rtable)
+	{
+		RangeTblEntry *rtetmp = lfirst(lc);
+		if ((rtetmp->relkind == RELKIND_MATVIEW) &&
+			(rtetmp->alias != NULL) &&
+			(strcmp(rtetmp->alias->aliasname, "new") == 0 ||
+			 strcmp(rtetmp->alias->aliasname, "old") == 0))
+		{
+			foreach_delete_current(viewQuery->rtable, lc);
+		}
+	}
+
+	/*
+	 * Now we have the right relation, adjust
+	 * varnos in its query tree.
+	 * AQUMV_FIXME_MVP: Only one single relation
+	 * is supported now, we could assign varno
+	 * to 1 opportunistically.
+	 */
+	aqumv_adjust_varno(viewQuery, 1);
+}
+
+/*
+ * Process varno after we eliminate mv's actions("old" and "new" relation)
+ * Correct rindex and all varnos with a delta.
+ *
+ * MV's actions query tree:
+ *		[rtable]
+ *				RangeTblEntry [rtekind=RTE_RELATION]
+ *						[alias] Alias [aliasname="old"]
+ *				RangeTblEntry [rtekind=RTE_RELATION]
+ *						[alias] Alias [aliasname="new"]
+ *				RangeTblEntry [rtekind=RTE_RELATION]
+ *		[jointree]
+ *				FromExpr []
+ *						[fromlist]
+ *								RangeTblRef [rtindex=3]
+ *		[targetList]
+ *				TargetEntry [resno=1 resname="c1"]
+ *						Var [varno=3 varattno=1]
+ *				TargetEntry [resno=2 resname="c2"]
+ *						Var [varno=3 varattno=2]
+ *------------------------------------------------------------------------------------------
+ * MV's query tree after rewrite:
+ *		[rtable]
+ *				RangeTblEntry [rtekind=RTE_RELATION]
+ *		[jointree]
+ *				FromExpr []
+ *						[fromlist]
+ *								RangeTblRef [rtindex=3]
+ *		[targetList]
+ *				TargetEntry [resno=1 resname="c1"]
+ *						Var [varno=3 varattno=1]
+ *				TargetEntry [resno=2 resname="c2"]
+ *						Var [varno=3 varattno=2]
+ *------------------------------------------------------------------------------------------
+ * MV's query tree after varno adjust:
+ *		[rtable]
+ *				RangeTblEntry [rtekind=RTE_RELATION]
+ *		[jointree]
+ *				FromExpr []
+ *						[fromlist]
+ *								RangeTblRef [rtindex=1]
+ *		[targetList]
+ *				TargetEntry [resno=1 resname="c1"]
+ *						Var [varno=1 varattno=1]
+ *				TargetEntry [resno=2 resname="c2"]
+ *						Var [varno=1 varattno=2]
+ *
+ */
+static void
+aqumv_adjust_varno(Query* parse, int varno)
+{
+	aqumv_adjust_varno_context context;
+	context.varno = varno;
+	parse = query_tree_mutator(parse, aqumv_adjust_varno_mutator, &context, QTW_DONT_COPY_QUERY);
+}
+
+static Node *aqumv_adjust_varno_mutator(Node *node, aqumv_adjust_varno_context *context)
+{
+	if (node == NULL)
+		return NULL;
+	if (IsA(node, Var))
+	{
+		((Var *)node)->varno = context->varno;
+		((Var *)node)->varnosyn = context->varno; /* Keep syntactic with varno. */
+	}
+	else if (IsA(node, RangeTblRef))
+		/* AQUMV_FIXME_MVP: currently we have only one relation */
+		((RangeTblRef*) node)->rtindex = context->varno;
+	return expression_tree_mutator(node, aqumv_adjust_varno_mutator, context);
 }

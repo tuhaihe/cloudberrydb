@@ -149,6 +149,11 @@ int			client_connection_check_interval = 0;
  */
 cancel_pending_hook_type cancel_pending_hook = NULL;
 
+/*
+ * Hook for query execution.
+ */
+exec_simple_query_hook_type exec_simple_query_hook = NULL;
+
 /* ----------------
  *		private typedefs etc
  * ----------------
@@ -1647,7 +1652,7 @@ restore_guc_to_QE(void )
  *
  * Execute a "simple Query" protocol message.
  */
-static void
+void
 exec_simple_query(const char *query_string)
 {
 	CommandDest dest = whereToSendOutput;
@@ -1774,12 +1779,11 @@ exec_simple_query(const char *query_string)
 		}
 
 		/*
-		 * If are connected in utility mode, disallow PREPARE TRANSACTION
-		 * statements.
+		 * GPDB: If we are connected in utility mode, disallow PREPARE
+		 * TRANSACTION statements.
 		 */
-		TransactionStmt *transStmt = (TransactionStmt *) parsetree;
-		if (Gp_role == GP_ROLE_UTILITY && IsA(parsetree, TransactionStmt) &&
-			transStmt->kind == TRANS_STMT_PREPARE)
+		if (Gp_role == GP_ROLE_UTILITY && IsA(parsetree->stmt, TransactionStmt) &&
+			((TransactionStmt *) parsetree->stmt)->kind == TRANS_STMT_PREPARE)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -5396,9 +5400,19 @@ PostgresMain(int argc, char *argv[],
 		 */
 		if (send_ready_for_query)
 		{
+			char activity[50];
+			memset(activity, 0, sizeof(activity));
+			int remain = sizeof(activity);
+
+			if (am_cursor_retrieve_handler)
+			{
+				strncpy(activity, "[retrieve] ", sizeof(activity));
+				remain -= strlen(activity);
+			}
 			if (IsAbortedTransactionBlockState())
 			{
-				set_ps_display("idle in transaction (aborted)");
+				strncat(activity, "idle in transaction (aborted)", remain);
+				set_ps_display(activity);
 				pgstat_report_activity(STATE_IDLEINTRANSACTION_ABORTED, NULL);
 
 				/* Start the idle-in-transaction timer */
@@ -5411,7 +5425,8 @@ PostgresMain(int argc, char *argv[],
 			}
 			else if (IsTransactionOrTransactionBlock())
 			{
-				set_ps_display("idle in transaction");
+				strncat(activity, "idle in transaction", remain);
+				set_ps_display(activity);
 				pgstat_report_activity(STATE_IDLEINTRANSACTION, NULL);
 
 				/* Start the idle-in-transaction timer */
@@ -5437,7 +5452,8 @@ PostgresMain(int argc, char *argv[],
 				pgstat_report_stat(false);
 				pgstat_report_queuestat();
 
-				set_ps_display("idle");
+				strncat(activity, "idle", remain);
+				set_ps_display(activity);
 				pgstat_report_activity(STATE_IDLE, NULL);
 
 				/* Start the idle-session timer */
@@ -5569,12 +5585,19 @@ PostgresMain(int argc, char *argv[],
 					if (am_walsender)
 					{
 						if (!exec_replication_command(query_string))
-							exec_simple_query(query_string);
+						{
+							if (exec_simple_query_hook)
+								exec_simple_query_hook(query_string);
+							else
+								exec_simple_query(query_string);
+						}
 					}
 					else if (am_ftshandler)
 						HandleFtsMessage(query_string);
 					else if (am_faulthandler)
 						HandleFaultMessage(query_string);
+					else if (exec_simple_query_hook)
+						exec_simple_query_hook(query_string);
 					else
 						exec_simple_query(query_string);
 
@@ -5735,7 +5758,10 @@ PostgresMain(int argc, char *argv[],
 						}
 						else
 						{
-							exec_simple_query(query_string);
+							if (exec_simple_query_hook)
+								exec_simple_query_hook(query_string);
+							else
+								exec_simple_query(query_string);
 						}
 					}
 					else

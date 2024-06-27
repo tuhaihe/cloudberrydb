@@ -245,6 +245,7 @@ test: segwalrep/commit_blocking_on_standby
 test: segwalrep/dtx_recovery_wait_lsn
 test: fts_manual_probe
 test: fts_session_reset
+test: fts_segment_reset
 
 # Reindex tests
 test: reindex/abort_reindex
@@ -312,3 +313,4 @@ test: uao/ao_unique_index_vacuum_row
 test: uao/ao_unique_index_vacuum_column
 
 test: local_directory_table_mixed
+test: stat_activity_extended

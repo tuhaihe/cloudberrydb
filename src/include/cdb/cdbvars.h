@@ -308,6 +308,33 @@ typedef enum GpVars_Interconnect_Type
 
 extern int Gp_interconnect_type;
 
+/*
+ * We support different strategies for address binding for sockets used for
+ * motion communication over the interconnect.
+ *
+ * One approach is to use an unicast address, specifically the segment's
+ * gp_segment_configuration.address field to perform the address binding. This
+ * has the benefits of reducing port usage on a segment host and ensures that
+ * the NIC backed by the address field is the only one used for communication
+ * (and not an externally facing slower NIC, like the ones that typically back
+ * the gp_segment_configuration.hostname field)
+ *
+ * In some cases, inter-segment communication using the unicast address
+ * mentioned above, may not be possible. One such example is if the source
+ * segment's address field and the destination segment's address field are on
+ * different subnets and/or existing routing rules don't allow for such
+ * communication. In these cases, using a wildcard address for address binding
+ * is the only available fallback, enabling the use of any network interface
+ * compliant with routing rules.
+ */
+typedef enum GpVars_Interconnect_Address_Type
+{
+	INTERCONNECT_ADDRESS_TYPE_UNICAST = 0,
+	INTERCONNECT_ADDRESS_TYPE_WILDCARD
+} GpVars_Interconnect_Address_Type;
+
+extern int Gp_interconnect_address_type;
+
 extern char *gp_interconnect_proxy_addresses;
 
 typedef enum GpVars_Interconnect_Method
@@ -682,6 +709,18 @@ extern int gp_workfile_bytes_to_checksum;
 
 extern bool coredump_on_memerror;
 
+/* Greenplum linux cgroup version, is enable version 2 */
+extern bool gp_resource_group_enable_cgroup_version_two;
+
+/* Greenplum linux cgroup version, is enable version 2 */
+extern bool gp_resource_group_enable_cgroup_version_two;
+
+/* Greenplum linux cgroup version, is enable version 2 */
+extern bool gp_resource_group_enable_cgroup_version_two;
+
+/* Greenplum linux cgroup version, is enable version 2 */
+extern bool gp_resource_group_enable_cgroup_version_two;
+
 /*
  * Autostats feature, whether or not to to automatically run ANALYZE after 
  * insert/delete/update/ctas or after ctas/copy/insert in case the target
@@ -780,5 +819,48 @@ extern const char * lookup_autostats_mode_by_value(GpAutoStatsModeValue val);
  * for parallel retrieve cursor.
  */
 #define CDB_NOTIFY_ENDPOINT_ACK "ack_notify"
+
+typedef enum WarehouseStatus
+{
+	WAREHOUSE_STATUS_CREATING,
+	WAREHOUSE_STATUS_RUNNING,
+	WAREHOUSE_STATUS_SUSPENDED,
+	WAREHOUSE_STATUS_STOPPING
+} WarehouseStatus;
+
+typedef struct WarehouseSegmentConfig
+{
+	char	   *hostname;
+	char	   *address;
+	int32		port;
+	char	   *data_directory;
+	int16		content_id;
+} WarehouseSegmentConfig;
+
+/*
+ * Warehouse hook for Create/Drop/Alter Warehouse.
+ * There are different implementations for different deployment methods.
+ */
+typedef struct WarehouseMethod{
+bool (*CreateWarehouse_hook)(char *warehouse_name,
+							 int warehouse_size,
+							 char **warehouse_options,
+							 int warehouse_options_size,
+							 WarehouseSegmentConfig **seg_configs,
+							 int *seg_configs_size,
+							 WarehouseStatus *status);
+
+bool (*DropWarehouse_hook)(char *warehouse_name,
+						   WarehouseSegmentConfig *seg_configs,
+						   int warehouse_size);
+
+bool (*AlterWarehouse_hook)(char *warehouse_name,
+							int old_warehouse_size,
+							int new_warehouse_size,
+							WarehouseSegmentConfig **new_seg_configs,
+							int *seg_configs_size);
+} WarehouseMethod;
+
+extern WarehouseMethod *warehouse_method;
 
 #endif   /* CDBVARS_H */
