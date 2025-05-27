@@ -1,20 +1,30 @@
 [submodule "gpcontrib/gpcloud/test/googletest"]
 	path = gpcontrib/gpcloud/test/googletest
 	url = https://github.com/google/googletest.git
+	# branch: v1.17.0
+	commit = 52eb8108c5bdec04579160ae17225d66034bd723
 [submodule "contrib/pax_storage/src/cpp/contrib/googletest"]
 	path = contrib/pax_storage/src/cpp/contrib/googletest
 	url = https://github.com/google/googletest.git
-	branch = v1.15.x
+	# branch: v1.17.0
+	commit = 52eb8108c5bdec04579160ae17225d66034bd723
 [submodule "contrib/pax_storage/src/cpp/contrib/tabulate"]
 	path = contrib/pax_storage/src/cpp/contrib/tabulate
 	url = https://github.com/p-ranav/tabulate.git
+	# branch = v1.5
+	commit = b35db4cce50a4b296290b0ae827305cdeb23751e
 [submodule "contrib/pax_storage/src/cpp/contrib/googlebench"]
 	path = contrib/pax_storage/src/cpp/contrib/googlebench
 	url = https://github.com/google/benchmark.git
+	# branch = v1.9.4
+	commit = eddb0241389718a23a42db6af5f0164b6e0139af
 [submodule "contrib/pax_storage/src/cpp/contrib/cpp-stub"]
 	path = contrib/pax_storage/src/cpp/contrib/cpp-stub
 	url = https://github.com/coolxv/cpp-stub.git
+	# branch = master
+	commit = 74c61d7383a51d94816110169e3f746fbdb9ee57
 [submodule "dependency/yyjson"]
 	path = dependency/yyjson
 	url = https://github.com/ibireme/yyjson.git
-
+	# branch = v0.11.1
+	commit = 9e24d6bcead647231f81173cc5c6bb6c097c00e4
