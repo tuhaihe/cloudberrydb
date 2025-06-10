@@ -655,6 +655,8 @@ CFLAGS_SSE42
 have_win32_dbghelp
 LIBOBJS
 UUID_LIBS
+PROTOC
+CMAKE
 LDAP_LIBS_BE
 LDAP_LIBS_FE
 CURL_LIBS
@@ -15701,6 +15703,110 @@ fi
 fi
 
 
+
+# for contrib/pax_storage
+if test "$enable_pax" = yes; then
+  # Check for GCC version
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking GCC version for PAX" >&5
+$as_echo_n "checking GCC version for PAX... " >&6; }
+  if test "$GCC" = yes; then
+    gcc_version=`$CC -dumpversion`
+    if test `echo $gcc_version | cut -d. -f1` -lt 11; then
+      as_fn_error $? "GCC/GCC-C++ version 11 or later is required for PAX" "$LINENO" 5
+    fi
+  fi
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $gcc_version" >&5
+$as_echo "$gcc_version" >&6; }
+  # Check for CMake
+  # Extract the first word of "cmake", so it can be a program name with args.
+set dummy cmake; ac_word=$2
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+$as_echo_n "checking for $ac_word... " >&6; }
+if ${ac_cv_path_CMAKE+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  case $CMAKE in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_CMAKE="$CMAKE" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_path_CMAKE="$as_dir/$ac_word$ac_exec_ext"
+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  ;;
+esac
+fi
+CMAKE=$ac_cv_path_CMAKE
+if test -n "$CMAKE"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $CMAKE" >&5
+$as_echo "$CMAKE" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
+
+  if test -z "$CMAKE"; then
+    as_fn_error $? "CMake 3.11 or later is required for PAX" "$LINENO" 5
+  fi
+  # Check for Protobuf
+  # Extract the first word of "protoc", so it can be a program name with args.
+set dummy protoc; ac_word=$2
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+$as_echo_n "checking for $ac_word... " >&6; }
+if ${ac_cv_path_PROTOC+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  case $PROTOC in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_PROTOC="$PROTOC" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_path_PROTOC="$as_dir/$ac_word$ac_exec_ext"
+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  ;;
+esac
+fi
+PROTOC=$ac_cv_path_PROTOC
+if test -n "$PROTOC"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $PROTOC" >&5
+$as_echo "$PROTOC" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
+
+  if test -z "$PROTOC"; then
+    as_fn_error $? "Protobuf 3.5.0 or later is required for PAX" "$LINENO" 5
+  fi
+  # ZSTD is already checked in the main configure
+fi
 
 # for contrib/sepgsql
 if test "$with_selinux" = yes; then

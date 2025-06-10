@@ -1749,6 +1749,30 @@ fi
 AC_SUBST(LDAP_LIBS_FE)
 AC_SUBST(LDAP_LIBS_BE)
 
+# for contrib/pax_storage
+if test "$enable_pax" = yes; then
+  # Check for GCC version
+  AC_MSG_CHECKING([GCC version for PAX])
+  if test "$GCC" = yes; then
+    gcc_version=`$CC -dumpversion`
+    if test `echo $gcc_version | cut -d. -f1` -lt 11; then
+      AC_MSG_ERROR([GCC/GCC-C++ version 11 or later is required for PAX])
+    fi
+  fi
+  AC_MSG_RESULT([$gcc_version])
+  # Check for CMake
+  AC_PATH_PROG(CMAKE, cmake)
+  if test -z "$CMAKE"; then
+    AC_MSG_ERROR([CMake 3.11 or later is required for PAX])
+  fi
+  # Check for Protobuf
+  AC_PATH_PROG(PROTOC, protoc)
+  if test -z "$PROTOC"; then
+    AC_MSG_ERROR([Protobuf 3.5.0 or later is required for PAX])
+  fi
+  # ZSTD is already checked in the main configure
+fi
+
 # for contrib/sepgsql
 if test "$with_selinux" = yes; then
   AC_CHECK_LIB(selinux, security_compute_create_name, [],
