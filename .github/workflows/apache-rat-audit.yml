@@ -91,22 +91,23 @@ jobs:
             echo "## Apache Rat Audit Results"
             echo "- Run Time: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
             echo ""
-            
+
             if [[ -f rat-output.log ]]; then
+              # First extract and display summary statistics (only once)
+              if grep -q "Rat check: Summary over all files" rat-output.log; then
+                echo "#### 📊 License Summary"
+                summary_line=$(grep "Rat check: Summary over all files" rat-output.log)
+                echo "\`\`\`"
+                echo "$summary_line"
+                echo "\`\`\`"
+                echo ""
+              fi
+
+              # Then determine the result status
               if grep -q "\[INFO\] BUILD FAILURE" rat-output.log; then
                 echo "### ❌ Check Failed - License Compliance Issues Detected"
                 echo ""
-                
-                # Extract and display summary statistics
-                if grep -q "Rat check: Summary over all files" rat-output.log; then
-                  echo "#### 📊 License Summary"
-                  summary_line=$(grep "Rat check: Summary over all files" rat-output.log)
-                  echo "\`\`\`"
-                  echo "$summary_line"
-                  echo "\`\`\`"
-                  echo ""
-                fi
-                
+
                 # Extract and display files with unapproved licenses
                 if grep -q "Files with unapproved licenses:" rat-output.log; then
                   echo "#### 🚫 Files with Unapproved Licenses"
@@ -119,14 +120,7 @@ jobs:
                   echo "\`\`\`"
                   echo ""
                 fi
-                
-                # Show build failure context
-                echo "#### 🔍 Build Failure Details"
-                echo "\`\`\`"
-                grep -A 10 "\[INFO\] BUILD FAILURE" rat-output.log | head -15
-                echo "\`\`\`"
-                echo ""
-                
+
                 echo "💡 **How to fix:**"
                 echo ""
                 echo "**For new original files you created:**"
@@ -140,16 +134,10 @@ jobs:
                 echo "**Need help?**"
                 echo "- Run \`mvn clean verify -Drat.consoleOutput=true\` locally for the full report"
                 echo "- Email dev@cloudberry.apache.org if you have questions about license compatibility"
-                
-                # Show success summary if available
-                if grep -q "Rat check: Summary over all files" rat-output.log; then
-                  echo "#### 📊 License Summary"
-                  summary_line=$(grep "Rat check: Summary over all files" rat-output.log)
-                  echo "\`\`\`"
-                  echo "$summary_line"
-                  echo "\`\`\`"
-                fi
-                
+
+              elif grep -q "\[INFO\] BUILD SUCCESS" rat-output.log; then
+                echo "### ✅ Check Passed - All Files Comply with Apache License Requirements"
+
               else
                 echo "### ⚠️ Indeterminate Result"
                 echo "Check the uploaded log file for details."
