@@ -127,12 +127,19 @@ jobs:
                 echo "\`\`\`"
                 echo ""
                 
-                echo "💡 **How to fix:** Add Apache license headers to the files listed above."
-                echo "You can run \`mvn clean verify -Drat.consoleOutput=true\` locally to see the full report."
-                
-              elif grep -q "\[INFO\] BUILD SUCCESS" rat-output.log; then
-                echo "### ✅ Check Passed - All Files Comply with Apache License Requirements"
+                echo "💡 **How to fix:**"
                 echo ""
+                echo "**For new original files you created:**"
+                echo "- Add the standard Apache License header to each file"
+                echo ""
+                echo "**For third-party files with different licenses:**"
+                echo "- Add the file to exclusion list in \`pom.xml\` under the rat-maven-plugin configuration"
+                echo "- Ensure the license is compatible with Apache License 2.0"
+                echo "- Avoid introducing components with incompatible licenses"
+                echo ""
+                echo "**Need help?**"
+                echo "- Run \`mvn clean verify -Drat.consoleOutput=true\` locally for the full report"
+                echo "- Email dev@cloudberry.apache.org if you have questions about license compatibility"
                 
                 # Show success summary if available
                 if grep -q "Rat check: Summary over all files" rat-output.log; then
