@@ -1,0 +1,82 @@
+name: "Bi-Weekly Cloudberry Summary Report"
+
+on:
+  schedule:
+    - cron: '0 0 */14 * *'   # Run every 14 days at 00:00 UTC
+
+permissions:
+  contents: read
+  issues: read
+  discussions: write
+  pull-requests: read
+  models: read
+
+jobs:
+  generate-summary:
+    name: Generate Summary via AI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch new activity from all repos
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const repos = [
+              'apache/cloudberry',
+              'apache/cloudberry-pxf',
+              'apache/cloudberry-go-libs',
+              'apache/cloudberry-devops-release',
+              'apache/cloudberry-site'
+            ];
+            const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
+            let context = '';
+            for (const repo of repos) {
+              const [owner, repoName] = repo.split('/');
+              const issues = await github.rest.issues.listForRepo({ owner, repo: repoName, since, state: 'all' });
+              const prs = await github.rest.pulls.list({ owner, repo: repoName, state: 'closed', sort: 'updated', direction: 'desc' });
+              let discussionsList = [];
+              try {
+                discussionsList = await github.rest.discussions.list({ owner, repo: repoName, since });
+              } catch (e) {
+                console.log(`Discussions API not available for ${repo}`);
+              }
+              context += `Repo: ${repo}\nIssues:\n${issues.data.map(i => `- #${i.number} ${i.title}`).join('\n')}\nPRs merged:\n${prs.data.filter(p => p.merged_at && new Date(p.merged_at) > new Date(since)).map(p => `- #${p.number} ${p.title}`).join('\n')}\nDiscussions:\n${(discussionsList.data || []).map(d => `- ${d.title}`).join('\n')}\n\n`;
+            }
+            return context;
+          result-encoding: string
+          id: context
+
+      - name: Summarize with GitHub Models
+        uses: supercharge/github-actions-inference@v1
+        with:
+          model: "openai/gpt-4o"  # You can replace with another supported model
+          input: |
+            Below is the activity (Issues / Merged PRs / Discussions) from Apache Cloudberry main repository and components in the last two weeks:
+            ${{ steps.context.outputs.result }}
+            Please generate a concise, clear bi-weekly community report highlighting the main updates.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post summary to Discussions
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Apache Cloudberry Bi-Weekly Report: ${new Date().toISOString().slice(0,10)}`;
+            const body = `${{ steps.inference.outputs.generated_text }}`;
+
+            // Create a discussion in "Ideas / Feature Requests" category
+            const discussions = await github.rest.discussions.listCategories({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            const category = discussions.data.find(c => c.name.toLowerCase().includes("ideas"));
+            if (!category) {
+              throw new Error("Ideas/Feature Requests category not found");
+            }
+
+            await github.rest.discussions.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              category_id: category.id
+            });
