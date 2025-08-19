@@ -60,7 +60,6 @@ jobs:
       - name: Check commit messages
         shell: bash
         run: |
-          set -e
           
           # Get PR commits with limit
           PR_COMMITS=$(git log --format="%H" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} | head -${MAX_COMMITS_TO_CHECK})
