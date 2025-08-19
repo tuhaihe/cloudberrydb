@@ -155,11 +155,14 @@ jobs:
             echo "### 📝 Note" >> $GITHUB_STEP_SUMMARY
             echo "These suggestions are for reference only and won't block PR merging." >> $GITHUB_STEP_SUMMARY
             echo "Please refer to the project's .gitmessage template for detailed guidelines." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **Some commits have style suggestions - please review above**" >> $GITHUB_STEP_SUMMARY
+            # Exit with failure to make the check visible
+            exit 1
           else
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "🎉 All commits follow the recommended guidelines!" >> $GITHUB_STEP_SUMMARY
+            # Exit with success when all commits are good
+            exit 0
           fi
-          
-          # Always exit with success - this is a non-blocking check
-          exit 0
 
