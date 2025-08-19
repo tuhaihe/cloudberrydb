@@ -60,6 +60,8 @@ jobs:
       - name: Check commit messages
         shell: bash
         run: |
+          # Don't exit on errors - we want to check all commits
+          set +e
           
           # Get PR commits with limit
           PR_COMMITS=$(git log --format="%H" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} | head -${MAX_COMMITS_TO_CHECK})
@@ -81,9 +83,10 @@ jobs:
           HAS_ISSUES=false
           
           for COMMIT in $PR_COMMITS; do
-            TITLE=$(git log --format="%s" -n 1 "$COMMIT")
-            BODY=$(git log --format="%b" -n 1 "$COMMIT")
-            RAW=$(git log --format="%B" -n 1 "$COMMIT")
+            # Get commit info with error handling
+            TITLE=$(git log --format="%s" -n 1 "$COMMIT" 2>/dev/null || echo "Warning: unable to read commit title")
+            BODY=$(git log --format="%b" -n 1 "$COMMIT" 2>/dev/null || echo "")
+            RAW=$(git log --format="%B" -n 1 "$COMMIT" 2>/dev/null || echo "Warning: unable to read commit message")
             
             echo "### Checking commit: ${COMMIT:0:8}" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
@@ -123,6 +126,13 @@ jobs:
                 ISSUES+=("- Found $LONG_LINES line(s) in body exceeding ${MAX_BODY_LINE_LENGTH} characters")
               fi
             fi
+            
+            # Skip to next commit if there's a warning reading this one
+            if [[ "$TITLE" == "Warning: unable to read commit title" ]]; then
+              echo "⚠️ Warning: unable to read commit $COMMIT, skipping..." >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              continue
+            fi
                         
             # Output issues
             if [[ ${#ISSUES[@]} -gt 0 ]]; then
@@ -145,8 +155,11 @@ jobs:
             echo "### 📝 Note" >> $GITHUB_STEP_SUMMARY
             echo "These suggestions are for reference only and won't block PR merging." >> $GITHUB_STEP_SUMMARY
             echo "Please refer to the project's .gitmessage template for detailed guidelines." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
           else
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "🎉 All commits follow the recommended guidelines!" >> $GITHUB_STEP_SUMMARY
           fi
+          
+          # Always exit with success - this is a non-blocking check
+          exit 0
+
