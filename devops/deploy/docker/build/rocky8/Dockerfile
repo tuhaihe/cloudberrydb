@@ -72,6 +72,7 @@ ENV USER=gpadmin
 RUN dnf makecache && \
     dnf install -y \
         epel-release \
+        vim \
         git && \
     dnf makecache && \
     dnf config-manager --disable epel && \
