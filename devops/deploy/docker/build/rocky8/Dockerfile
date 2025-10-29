@@ -72,7 +72,6 @@ ENV USER=gpadmin
 RUN dnf makecache && \
     dnf install -y \
         epel-release \
-        rocky-release-hpc \
         git && \
     dnf makecache && \
     dnf config-manager --disable epel && \
@@ -113,7 +112,6 @@ RUN dnf makecache && \
         openldap-devel \
         openssh-clients \
         openssh-server \
-        openssl-devel \
         pam-devel \
         passwd \
         perl-Env \
