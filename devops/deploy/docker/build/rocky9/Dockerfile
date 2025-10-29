@@ -72,7 +72,6 @@ ENV USER=gpadmin
 RUN dnf makecache && \
     dnf install -y \
         epel-release \
-        rocky-release-hpc \
         git && \
     dnf config-manager --disable epel-cisco-openh264 && \
     dnf makecache && \
@@ -126,7 +125,6 @@ RUN dnf makecache && \
         lz4 \
         lz4-devel \
         openldap-devel \
-        openssl-devel \
         pam-devel \
         perl-ExtUtils-Embed \
         perl-Test-Simple \
