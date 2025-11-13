@@ -2,7 +2,7 @@ FIXEDDECIMAL
 ============
 
 Works with PostgreSQL 9.5 or higher.
-The latest test was executed on version 12.
+The latest test was executed on version 14.
 
 Overview
 --------
