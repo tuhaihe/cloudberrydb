@@ -538,7 +538,7 @@ install_dependencies() {
         [ "$FEATURE_ICU" = true ] && FEATURE_DEPS+=(libicu-devel)
         [ "$FEATURE_SELINUX" = true ] && FEATURE_DEPS+=(libselinux-devel)
         [ "$FEATURE_SECCOMP" = true ] && FEATURE_DEPS+=(libseccomp-devel)
-        [ "$FEATURE_SYSTEMD" = true ] && FEATURE_DEPS+=(systemd-devel)
+        [ "$FEATURE_SYSTEMD" = true ] && FEATURE_DEPS+?(systemd-devel)
         [ "$FEATURE_UUID" = true ] && FEATURE_DEPS+=(libuuid-devel)
         [ "$FEATURE_XSLT" = true ] && FEATURE_DEPS+=(libxslt-devel)
         [ "$FEATURE_GPFDIST" = true ] && FEATURE_DEPS+=(libevent-devel apr-devel libyaml-devel)
@@ -574,7 +574,6 @@ install_dependencies() {
             iproute2 net-tools wget tar sudo openssh-client openssh-server
             rsync curl
         )
-        
         # Feature Dependencies
         [ "$FEATURE_ORCA" = true ] && FEATURE_DEPS+=(libxerces-c-dev)
         [ "$FEATURE_PXF" = true ] && FEATURE_DEPS+=(libcurl4-openssl-dev)
@@ -680,6 +679,17 @@ install_xerces() {
         return
     fi
 
+    # For Ubuntu, use system package instead of compiling from source
+    if [[ "$OS_ID" == "ubuntu" ]]; then
+        info "Ubuntu detected - using system libxerces-c-dev package"
+        if ! dpkg -l | grep -q libxerces-c-dev; then
+            run_with_header "Installing system Xerces-C" \
+                "apt-get install -y libxerces-c-dev" || fail "Failed to install libxerces-c-dev"
+        fi
+        return
+    fi
+
+    # For RHEL/CentOS/Rocky, continue with source compilation
     if [ -f "/usr/local/xerces-c/lib/libxerces-c.so" ]; then
         info "Xerces-C appears to be installed. Skipping."
         return
@@ -786,8 +796,15 @@ build_and_install() {
     # Construct Configure Options
     local CONFIG_OPTS=()
     CONFIG_OPTS+=(--prefix="$INSTALL_DIR")
-    CONFIG_OPTS+=(--with-includes=/usr/local/include)
-    CONFIG_OPTS+=(--with-libs=/usr/local/lib)
+    
+    # Ubuntu-specific Xerces-C handling
+    if [[ "$OS_ID" == "ubuntu" && "$FEATURE_ORCA" = true ]]; then
+        CONFIG_OPTS+=(--with-includes=/usr/include/xercesc)
+        CONFIG_OPTS+=(--with-libs=/usr/lib/x86_64-linux-gnu)
+    else
+        CONFIG_OPTS+=(--with-includes=/usr/local/include)
+        CONFIG_OPTS+=(--with-libs=/usr/local/lib)
+    fi
     # Feature Flags Mapping
     [ "$FEATURE_ORCA" = true ] && CONFIG_OPTS+=(--enable-orca) || CONFIG_OPTS+=(--disable-orca)
     [ "$FEATURE_PXF" = true ] && CONFIG_OPTS+=(--enable-pxf) || CONFIG_OPTS+=(--disable-pxf)
