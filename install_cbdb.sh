@@ -131,9 +131,9 @@ run_with_header() {
     echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║${NC} ${GREEN}STEP:${NC} $step_name"
     # Truncate command if too long
-    local display_cmd="${cmd:0:60}"
-    [ "${#cmd}" -gt 60 ] && display_cmd="${display_cmd}..."
-    echo -e "${BLUE}║${NC} ${GREEN}CMD: ${NC}$display_cmd"
+        local display_cmd="${cmd:0:60}"
+        [ "${#cmd}" -gt 60 ] && display_cmd="${display_cmd}..."
+        echo -e "${BLUE}║${NC} ${GREEN}CMD:${NC} $display_cmd"
     echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -227,10 +227,17 @@ select_features() {
         if [[ "$choice" =~ ^[Yy]$ ]]; then
             info "Installing whiptail..."
             if [[ "$OS_ID" =~ ^(centos|rhel|rocky|almalinux)$ ]]; then
-                sudo dnf install -y newt >/dev/null 2>&1
+                run_with_header "Installing whiptail" "dnf install -y newt" false
             elif [[ "$OS_ID" == "ubuntu" ]]; then
-                sudo apt-get update >/dev/null 2>&1
-                sudo apt-get install -y whiptail >/dev/null 2>&1
+                run_with_header "Installing whiptail" "apt-get update && apt-get install -y whiptail" false
+            fi
+            
+            # After installation, check again and use whiptail if available
+            if command -v whiptail &> /dev/null; then
+                select_features_whiptail
+                return
+            else
+                warn "Whiptail installation failed, falling back to text menu"
             fi
         fi
     fi
@@ -240,7 +247,6 @@ select_features() {
         select_features_whiptail
     else
         info "Whiptail not available. Using standard menu."
-        sleep 1
         select_features_numeric
     fi
 }
@@ -774,7 +780,6 @@ build_and_install() {
     CONFIG_OPTS+=(--prefix="$INSTALL_DIR")
     CONFIG_OPTS+=(--with-includes=/usr/local/include)
     CONFIG_OPTS+=(--with-libs=/usr/local/lib)
-    
     # Feature Flags Mapping
     [ "$FEATURE_ORCA" = true ] && CONFIG_OPTS+=(--enable-orca) || CONFIG_OPTS+=(--disable-orca)
     [ "$FEATURE_PXF" = true ] && CONFIG_OPTS+=(--enable-pxf) || CONFIG_OPTS+=(--disable-pxf)
@@ -803,6 +808,26 @@ build_and_install() {
     [ "$FEATURE_GPCLOUD" = true ] && CONFIG_OPTS+=(--enable-gpcloud) || CONFIG_OPTS+=(--disable-gpcloud)
     [ "$FEATURE_EXTERNAL_FTS" = true ] && CONFIG_OPTS+=(--enable-external-fts) || CONFIG_OPTS+=(--disable-external-fts)
     [ "$FEATURE_PRELOAD_IC_MODULE" = true ] && CONFIG_OPTS+=(--enable-preload-ic-module) || CONFIG_OPTS+=(--disable-preload-ic-module)
+    
+    # Coverage testing - install lcov if requested but not available
+    if [ "$FEATURE_COVERAGE" = true ]; then
+        if ! command -v lcov >/dev/null 2>&1; then
+            info "lcov not found, installing lcov for coverage testing..."
+            if [[ "$OS_ID" =~ ^(centos|rhel|rocky|almalinux)$ ]]; then
+                run_with_header "Installing lcov" "dnf install -y lcov" false
+            elif [[ "$OS_ID" == "ubuntu" ]]; then
+                run_with_header "Installing lcov" "apt-get install -y lcov" false
+            fi
+            
+            # Check again after installation attempt
+            if ! command -v lcov >/dev/null 2>&1; then
+                fail "lcov installation failed. Please install lcov manually or disable coverage feature."
+            fi
+        fi
+        CONFIG_OPTS+=(--enable-coverage)
+    else
+        CONFIG_OPTS+=(--disable-coverage)
+    fi
     
     if [ "$FEATURE_TCL" = true ]; then
         CONFIG_OPTS+=(--with-tcl)
@@ -887,8 +912,27 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Prompt for user and installation directory if interactive
+setup_variables() {
+    if [ "$INTERACTIVE" = true ]; then
+        echo -n "Enter installation directory [/usr/local/cloudberry-db]: "
+        read INSTALL_DIR_INPUT
+        INSTALL_DIR=${INSTALL_DIR_INPUT:-/usr/local/cloudberry-db}
+        
+        echo -n "Enter gpadmin username [gpadmin]: "
+        read GPADMIN_USER_INPUT
+        GPADMIN_USER=${GPADMIN_USER_INPUT:-gpadmin}
+        
+        echo -n "Enter password for $GPADMIN_USER [changeme]: "
+        read -s GPADMIN_PASS_INPUT
+        echo
+        GPADMIN_PASS=${GPADMIN_PASS_INPUT:-changeme}
+    fi
+}
+
 check_root
 detect_os
+setup_variables
 
 # Execute Steps based on Mode
 if [ "$MODE" == "prepare" ]; then
