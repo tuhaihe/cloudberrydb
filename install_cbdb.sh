@@ -46,13 +46,32 @@ FEATURE_ICU=false
 FEATURE_SELINUX=false
 FEATURE_SECCOMP=false
 FEATURE_SYSTEMD=false
-FEATURE_UUID=true
+FEATURE_UUID=false
 FEATURE_XSLT=false
 FEATURE_PAX=false
 FEATURE_GPFDIST=true
-FEATURE_MAPREDUCE=true
-FEATURE_IC_PROXY=true
+FEATURE_MAPREDUCE=false
+FEATURE_IC_PROXY=false
 FEATURE_DEBUG=false
+
+# New Comprehensive Options
+FEATURE_PYTHONSRC_EXT=false
+FEATURE_GPCLOUD=false
+FEATURE_EXTERNAL_FTS=false
+FEATURE_PRELOAD_IC_MODULE=true
+FEATURE_TCL=false
+FEATURE_SSL=true
+FEATURE_OPENSSL_REDIRECT=false
+FEATURE_DEPEND=false
+FEATURE_CASSERT=false
+FEATURE_PROFILING=false
+FEATURE_COVERAGE=false
+FEATURE_DTRACE=false
+FEATURE_TAP_TESTS=false
+FEATURE_SERVERLESS=false
+FEATURE_SHARED_POSTGRES_BACKEND=true
+FEATURE_LINK_POSTGRES_WITH_SHARED=false
+FEATURE_CATALOG_EXT=false
 
 # ----------------------------------------------------------------------
 # Helper Functions
@@ -250,6 +269,23 @@ select_features_whiptail() {
     options+=("MAPREDUCE" "MapReduce Support" "$([ "$FEATURE_MAPREDUCE" = true ] && echo "ON" || echo "OFF")")
     options+=("IC_PROXY" "Interconnect Proxy" "$([ "$FEATURE_IC_PROXY" = true ] && echo "ON" || echo "OFF")")
     options+=("DEBUG" "Debug Build" "$([ "$FEATURE_DEBUG" = true ] && echo "ON" || echo "OFF")")
+    options+=("PYTHONSRC_EXT" "Python Source Extensions" "$([ "$FEATURE_PYTHONSRC_EXT" = true ] && echo "ON" || echo "OFF")")
+    options+=("GPCLOUD" "GPCloud Support" "$([ "$FEATURE_GPCLOUD" = true ] && echo "ON" || echo "OFF")")
+    options+=("EXTERNAL_FTS" "External FTS" "$([ "$FEATURE_EXTERNAL_FTS" = true ] && echo "ON" || echo "OFF")")
+    options+=("PRELOAD_IC_MODULE" "Preload Interconnect Module" "$([ "$FEATURE_PRELOAD_IC_MODULE" = true ] && echo "ON" || echo "OFF")")
+    options+=("TCL" "Tcl Language Support" "$([ "$FEATURE_TCL" = true ] && echo "ON" || echo "OFF")")
+    options+=("SSL" "SSL Support" "$([ "$FEATURE_SSL" = true ] && echo "ON" || echo "OFF")")
+    options+=("OPENSSL_REDIRECT" "OpenSSL Redirect" "$([ "$FEATURE_OPENSSL_REDIRECT" = true ] && echo "ON" || echo "OFF")")
+    options+=("DEPEND" "Dependency Tracking" "$([ "$FEATURE_DEPEND" = true ] && echo "ON" || echo "OFF")")
+    options+=("CASSERT" "C Assertions" "$([ "$FEATURE_CASSERT" = true ] && echo "ON" || echo "OFF")")
+    options+=("PROFILING" "Profiling" "$([ "$FEATURE_PROFILING" = true ] && echo "ON" || echo "OFF")")
+    options+=("COVERAGE" "Coverage" "$([ "$FEATURE_COVERAGE" = true ] && echo "ON" || echo "OFF")")
+    options+=("DTRACE" "DTrace Support" "$([ "$FEATURE_DTRACE" = true ] && echo "ON" || echo "OFF")")
+    options+=("TAP_TESTS" "TAP Tests" "$([ "$FEATURE_TAP_TESTS" = true ] && echo "ON" || echo "OFF")")
+    options+=("SERVERLESS" "Serverless Mode" "$([ "$FEATURE_SERVERLESS" = true ] && echo "ON" || echo "OFF")")
+    options+=("SHARED_POSTGRES_BACKEND" "Shared Postgres Backend" "$([ "$FEATURE_SHARED_POSTGRES_BACKEND" = true ] && echo "ON" || echo "OFF")")
+    options+=("LINK_POSTGRES_WITH_SHARED" "Link Postgres with Shared" "$([ "$FEATURE_LINK_POSTGRES_WITH_SHARED" = true ] && echo "ON" || echo "OFF")")
+    options+=("CATALOG_EXT" "Catalog Extensions" "$([ "$FEATURE_CATALOG_EXT" = true ] && echo "ON" || echo "OFF")")
 
     # Show checklist
     local selected
@@ -287,6 +323,23 @@ select_features_whiptail() {
     FEATURE_MAPREDUCE=false
     FEATURE_IC_PROXY=false
     FEATURE_DEBUG=false
+    FEATURE_PYTHONSRC_EXT=false
+    FEATURE_GPCLOUD=false
+    FEATURE_EXTERNAL_FTS=false
+    FEATURE_PRELOAD_IC_MODULE=false
+    FEATURE_TCL=false
+    FEATURE_SSL=false
+    FEATURE_OPENSSL_REDIRECT=false
+    FEATURE_DEPEND=false
+    FEATURE_CASSERT=false
+    FEATURE_PROFILING=false
+    FEATURE_COVERAGE=false
+    FEATURE_DTRACE=false
+    FEATURE_TAP_TESTS=false
+    FEATURE_SERVERLESS=false
+    FEATURE_SHARED_POSTGRES_BACKEND=false
+    FEATURE_LINK_POSTGRES_WITH_SHARED=false
+    FEATURE_CATALOG_EXT=false
 
     # Set selected features to true
     for feature in $selected; do
@@ -323,6 +376,23 @@ select_features_numeric() {
         "MAPREDUCE:MapReduce Support:$FEATURE_MAPREDUCE"
         "IC_PROXY:Interconnect Proxy:$FEATURE_IC_PROXY"
         "DEBUG:Debug Build:$FEATURE_DEBUG"
+        "PYTHONSRC_EXT:Python Source Extensions:$FEATURE_PYTHONSRC_EXT"
+        "GPCLOUD:GPCloud Support:$FEATURE_GPCLOUD"
+        "EXTERNAL_FTS:External FTS:$FEATURE_EXTERNAL_FTS"
+        "PRELOAD_IC_MODULE:Preload Interconnect Module:$FEATURE_PRELOAD_IC_MODULE"
+        "TCL:Tcl Language Support:$FEATURE_TCL"
+        "SSL:SSL Support:$FEATURE_SSL"
+        "OPENSSL_REDIRECT:OpenSSL Redirect:$FEATURE_OPENSSL_REDIRECT"
+        "DEPEND:Dependency Tracking:$FEATURE_DEPEND"
+        "CASSERT:C Assertions:$FEATURE_CASSERT"
+        "PROFILING:Profiling:$FEATURE_PROFILING"
+        "COVERAGE:Coverage:$FEATURE_COVERAGE"
+        "DTRACE:DTrace Support:$FEATURE_DTRACE"
+        "TAP_TESTS:TAP Tests:$FEATURE_TAP_TESTS"
+        "SERVERLESS:Serverless Mode:$FEATURE_SERVERLESS"
+        "SHARED_POSTGRES_BACKEND:Shared Postgres Backend:$FEATURE_SHARED_POSTGRES_BACKEND"
+        "LINK_POSTGRES_WITH_SHARED:Link Postgres with Shared:$FEATURE_LINK_POSTGRES_WITH_SHARED"
+        "CATALOG_EXT:Catalog Extensions:$FEATURE_CATALOG_EXT"
     )
     
     while true; do
@@ -449,6 +519,7 @@ install_dependencies() {
         BASE_DEPS+=(jansson-devel)
 
         # Feature Dependencies
+        [ "$FEATURE_ORCA" = true ] && FEATURE_DEPS+=(xerces-c-devel)
         [ "$FEATURE_PXF" = true ] && FEATURE_DEPS+=(libcurl-devel)
         [ "$FEATURE_GSSAPI" = true ] && FEATURE_DEPS+=(krb5-devel)
         [ "$FEATURE_LDAP" = true ] && FEATURE_DEPS+=(openldap-devel)
@@ -456,13 +527,25 @@ install_dependencies() {
         [ "$FEATURE_LZ4" = true ] && FEATURE_DEPS+=(lz4-devel)
         [ "$FEATURE_ZSTD" = true ] && FEATURE_DEPS+=(libzstd-devel)
         [ "$FEATURE_PAM" = true ] && FEATURE_DEPS+=(pam-devel)
-        [ "$FEATURE_PYTHON" = true ] && FEATURE_DEPS+=(python3-devel python3-pip)
+        [ "$FEATURE_PERL" = true ] && FEATURE_DEPS+=(perl-ExtUtils-Embed perl-core)
+        [ "$FEATURE_PYTHON" = true ] && FEATURE_DEPS+=(python3-devel)
         [ "$FEATURE_ICU" = true ] && FEATURE_DEPS+=(libicu-devel)
         [ "$FEATURE_SELINUX" = true ] && FEATURE_DEPS+=(libselinux-devel)
         [ "$FEATURE_SECCOMP" = true ] && FEATURE_DEPS+=(libseccomp-devel)
         [ "$FEATURE_SYSTEMD" = true ] && FEATURE_DEPS+=(systemd-devel)
         [ "$FEATURE_UUID" = true ] && FEATURE_DEPS+=(libuuid-devel)
         [ "$FEATURE_XSLT" = true ] && FEATURE_DEPS+=(libxslt-devel)
+        [ "$FEATURE_GPFDIST" = true ] && FEATURE_DEPS+=(libevent-devel apr-devel libyaml-devel)
+        
+        # New Feature Dependencies
+        [ "$FEATURE_PYTHONSRC_EXT" = true ] && FEATURE_DEPS+=(python3-pip libcurl-devel)
+        [ "$FEATURE_GPCLOUD" = true ] && FEATURE_DEPS+=(libcurl-devel libxml2-devel)
+        [ "$FEATURE_EXTERNAL_FTS" = true ] && FEATURE_DEPS+=(jansson-devel)
+        [ "$FEATURE_IC_PROXY" = true ] && FEATURE_DEPS+=(libuv-devel)
+        [ "$FEATURE_TCL" = true ] && FEATURE_DEPS+=(tcl-devel)
+        [ "$FEATURE_SSL" = true ] && FEATURE_DEPS+=(openssl-devel)
+        [ "$FEATURE_DTRACE" = true ] && FEATURE_DEPS+=(systemtap-sdt-devel)
+        [ "$FEATURE_TAP_TESTS" = true ] && FEATURE_DEPS+=(perl-IPC-Run)
         
         # PAX Dependencies (OS Specific)
         if [ "$FEATURE_PAX" = true ]; then
@@ -486,6 +569,8 @@ install_dependencies() {
             rsync curl
         )
         
+        # Feature Dependencies
+        [ "$FEATURE_ORCA" = true ] && FEATURE_DEPS+=(libxerces-c-dev)
         [ "$FEATURE_PXF" = true ] && FEATURE_DEPS+=(libcurl4-openssl-dev)
         [ "$FEATURE_GSSAPI" = true ] && FEATURE_DEPS+=(libkrb5-dev)
         [ "$FEATURE_LDAP" = true ] && FEATURE_DEPS+=(libldap2-dev)
@@ -494,13 +579,24 @@ install_dependencies() {
         [ "$FEATURE_ZSTD" = true ] && FEATURE_DEPS+=(libzstd-dev)
         [ "$FEATURE_PAM" = true ] && FEATURE_DEPS+=(libpam0g-dev)
         [ "$FEATURE_PERL" = true ] && FEATURE_DEPS+=(libperl-dev)
-        [ "$FEATURE_PYTHON" = true ] && FEATURE_DEPS+=(python3-dev python3-pip)
+        [ "$FEATURE_PYTHON" = true ] && FEATURE_DEPS+=(python3-dev)
         [ "$FEATURE_ICU" = true ] && FEATURE_DEPS+=(libicu-dev)
         [ "$FEATURE_SELINUX" = true ] && FEATURE_DEPS+=(libselinux1-dev)
         [ "$FEATURE_SECCOMP" = true ] && FEATURE_DEPS+=(libseccomp-dev)
         [ "$FEATURE_SYSTEMD" = true ] && FEATURE_DEPS+=(libsystemd-dev)
         [ "$FEATURE_UUID" = true ] && FEATURE_DEPS+=(uuid-dev)
         [ "$FEATURE_XSLT" = true ] && FEATURE_DEPS+=(libxslt1-dev)
+        [ "$FEATURE_GPFDIST" = true ] && FEATURE_DEPS+=(libevent-dev libapr1-dev libyaml-dev)
+
+        # New Feature Dependencies
+        [ "$FEATURE_PYTHONSRC_EXT" = true ] && FEATURE_DEPS+=(python3-pip libcurl4-openssl-dev)
+        [ "$FEATURE_GPCLOUD" = true ] && FEATURE_DEPS+=(libcurl4-openssl-dev libxml2-dev)
+        [ "$FEATURE_EXTERNAL_FTS" = true ] && FEATURE_DEPS+=(libjansson-dev)
+        [ "$FEATURE_IC_PROXY" = true ] && FEATURE_DEPS+=(libuv1-dev)
+        [ "$FEATURE_TCL" = true ] && FEATURE_DEPS+=(tcl-dev)
+        [ "$FEATURE_SSL" = true ] && FEATURE_DEPS+=(libssl-dev)
+        [ "$FEATURE_DTRACE" = true ] && FEATURE_DEPS+=(systemtap-sdt-dev)
+        [ "$FEATURE_TAP_TESTS" = true ] && FEATURE_DEPS+=(libipc-run-perl)
         
         # PAX Dependencies (OS Specific)
         if [ "$FEATURE_PAX" = true ]; then
@@ -674,46 +770,73 @@ build_and_install() {
     chown -R "$GPADMIN_USER:$GPADMIN_USER" "$INSTALL_DIR"
 
     # Construct Configure Options
-    local CONFIG_OPTS=("--prefix=$INSTALL_DIR")
+    local CONFIG_OPTS=()
+    CONFIG_OPTS+=(--prefix="$INSTALL_DIR")
+    CONFIG_OPTS+=(--with-includes=/usr/local/include)
+    CONFIG_OPTS+=(--with-libs=/usr/local/lib)
     
-    # Feature Flags
-    [ "$FEATURE_ORCA" = true ] && CONFIG_OPTS+=("--enable-orca")
-    [ "$FEATURE_PXF" = true ] && CONFIG_OPTS+=("--enable-pxf")
-    [ "$FEATURE_GSSAPI" = true ] && CONFIG_OPTS+=("--with-gssapi")
-    [ "$FEATURE_LDAP" = true ] && CONFIG_OPTS+=("--with-ldap")
-    [ "$FEATURE_XML" = true ] && CONFIG_OPTS+=("--with-libxml")
-    [ "$FEATURE_LZ4" = true ] && CONFIG_OPTS+=("--with-lz4")
-    [ "$FEATURE_ZSTD" = true ] && CONFIG_OPTS+=("--with-zstd")
-    [ "$FEATURE_PAM" = true ] && CONFIG_OPTS+=("--with-pam")
-    [ "$FEATURE_PERL" = true ] && CONFIG_OPTS+=("--with-perl")
-    [ "$FEATURE_PYTHON" = true ] && CONFIG_OPTS+=("--with-python")
-    [ "$FEATURE_ICU" = true ] && CONFIG_OPTS+=("--with-icu")
-    [ "$FEATURE_SELINUX" = true ] && CONFIG_OPTS+=("--with-selinux")
-    [ "$FEATURE_SECCOMP" = true ] && CONFIG_OPTS+=("--with-libseccomp")
-    [ "$FEATURE_SYSTEMD" = true ] && CONFIG_OPTS+=("--with-systemd")
-    [ "$FEATURE_UUID" = true ] && CONFIG_OPTS+=("--with-uuid=e2fs")
-    [ "$FEATURE_XSLT" = true ] && CONFIG_OPTS+=("--with-libxslt")
-    [ "$FEATURE_PAX" = true ] && CONFIG_OPTS+=("--enable-pax")
-    [ "$FEATURE_GPFDIST" = true ] && CONFIG_OPTS+=("--enable-gpfdist")
-    [ "$FEATURE_MAPREDUCE" = true ] && CONFIG_OPTS+=("--enable-mapreduce")
-    [ "$FEATURE_IC_PROXY" = true ] && CONFIG_OPTS+=("--enable-ic-proxy")
-    [ "$FEATURE_DEBUG" = true ] && CONFIG_OPTS+=("--enable-debug" "--enable-cassert")
+    # Feature Flags Mapping
+    [ "$FEATURE_ORCA" = true ] && CONFIG_OPTS+=(--enable-orca) || CONFIG_OPTS+=(--disable-orca)
+    [ "$FEATURE_PXF" = true ] && CONFIG_OPTS+=(--enable-pxf) || CONFIG_OPTS+=(--disable-pxf)
+    [ "$FEATURE_GSSAPI" = true ] && CONFIG_OPTS+=(--with-gssapi) || CONFIG_OPTS+=(--without-gssapi)
+    [ "$FEATURE_LDAP" = true ] && CONFIG_OPTS+=(--with-ldap) || CONFIG_OPTS+=(--without-ldap)
+    [ "$FEATURE_XML" = true ] && CONFIG_OPTS+=(--with-libxml) || CONFIG_OPTS+=(--without-libxml)
+    [ "$FEATURE_LZ4" = true ] && CONFIG_OPTS+=(--with-lz4) || CONFIG_OPTS+=(--without-lz4)
+    [ "$FEATURE_ZSTD" = true ] && CONFIG_OPTS+=(--with-zstd) || CONFIG_OPTS+=(--without-zstd)
+    [ "$FEATURE_PAM" = true ] && CONFIG_OPTS+=(--with-pam) || CONFIG_OPTS+=(--without-pam)
+    [ "$FEATURE_PERL" = true ] && CONFIG_OPTS+=(--with-perl) || CONFIG_OPTS+=(--without-perl)
+    [ "$FEATURE_PYTHON" = true ] && CONFIG_OPTS+=(--with-python) || CONFIG_OPTS+=(--without-python)
+    [ "$FEATURE_ICU" = true ] && CONFIG_OPTS+=(--with-icu) || CONFIG_OPTS+=(--without-icu)
+    [ "$FEATURE_SELINUX" = true ] && CONFIG_OPTS+=(--with-selinux) || CONFIG_OPTS+=(--without-selinux)
+    [ "$FEATURE_SECCOMP" = true ] && CONFIG_OPTS+=(--with-libseccomp) || CONFIG_OPTS+=(--without-libseccomp)
+    [ "$FEATURE_SYSTEMD" = true ] && CONFIG_OPTS+=(--with-systemd) || CONFIG_OPTS+=(--without-systemd)
+    [ "$FEATURE_UUID" = true ] && CONFIG_OPTS+=(--with-uuid=e2fs) || CONFIG_OPTS+=(--without-uuid)
+    [ "$FEATURE_XSLT" = true ] && CONFIG_OPTS+=(--with-libxslt) || CONFIG_OPTS+=(--without-libxslt)
+    [ "$FEATURE_PAX" = true ] && CONFIG_OPTS+=(--enable-pax) || CONFIG_OPTS+=(--disable-pax)
+    [ "$FEATURE_GPFDIST" = true ] && CONFIG_OPTS+=(--enable-gpfdist) || CONFIG_OPTS+=(--disable-gpfdist)
+    [ "$FEATURE_MAPREDUCE" = true ] && CONFIG_OPTS+=(--enable-mapreduce) || CONFIG_OPTS+=(--disable-mapreduce)
+    [ "$FEATURE_IC_PROXY" = true ] && CONFIG_OPTS+=(--enable-ic-proxy) || CONFIG_OPTS+=(--disable-ic-proxy)
+    [ "$FEATURE_DEBUG" = true ] && CONFIG_OPTS+=(--enable-debug --enable-cassert)
     
-    # Always enable these for standard build
-    CONFIG_OPTS+=("--with-openssl" "--with-libbz2" "--with-zlib")
-
-    # Setup LD_LIBRARY_PATH for configure and build
-    export LD_LIBRARY_PATH="/usr/local/cloudberry-db/lib:${LD_LIBRARY_PATH:-}"
+    # New Comprehensive Options Mapping
+    [ "$FEATURE_PYTHONSRC_EXT" = true ] && CONFIG_OPTS+=(--with-pythonsrc-ext) || CONFIG_OPTS+=(--without-pythonsrc-ext)
+    [ "$FEATURE_GPCLOUD" = true ] && CONFIG_OPTS+=(--enable-gpcloud) || CONFIG_OPTS+=(--disable-gpcloud)
+    [ "$FEATURE_EXTERNAL_FTS" = true ] && CONFIG_OPTS+=(--enable-external-fts) || CONFIG_OPTS+=(--disable-external-fts)
+    [ "$FEATURE_PRELOAD_IC_MODULE" = true ] && CONFIG_OPTS+=(--enable-preload-ic-module) || CONFIG_OPTS+=(--disable-preload-ic-module)
     
-    # Xerces paths if ORCA enabled
-    if [ "$FEATURE_ORCA" = true ]; then
-        CONFIG_OPTS+=("--with-includes=/usr/local/xerces-c/include" "--with-libraries=/usr/local/xerces-c/lib")
-        # Add xerces-c to LD_LIBRARY_PATH so configure can find it during test program execution
-        export LD_LIBRARY_PATH="/usr/local/xerces-c/lib:$LD_LIBRARY_PATH"
+    if [ "$FEATURE_TCL" = true ]; then
+        CONFIG_OPTS+=(--with-tcl)
+        # Try to find tclConfig.sh
+        local tcl_config_path=$(find /usr/lib* /usr/share -name tclConfig.sh 2>/dev/null | head -n 1)
+        if [ -n "$tcl_config_path" ]; then
+            CONFIG_OPTS+=(--with-tclconfig=$(dirname "$tcl_config_path"))
+        fi
+    else
+        CONFIG_OPTS+=(--without-tcl)
     fi
 
+    [ "$FEATURE_SSL" = true ] && CONFIG_OPTS+=(--with-ssl=openssl) || CONFIG_OPTS+=(--without-ssl)
+    [ "$FEATURE_OPENSSL_REDIRECT" = true ] && CONFIG_OPTS+=(--enable-openssl-redirect)
+    [ "$FEATURE_DEPEND" = true ] && CONFIG_OPTS+=(--enable-depend)
+    [ "$FEATURE_CASSERT" = true ] && CONFIG_OPTS+=(--enable-cassert)
+    [ "$FEATURE_PROFILING" = true ] && CONFIG_OPTS+=(--enable-profiling)
+    [ "$FEATURE_COVERAGE" = true ] && CONFIG_OPTS+=(--enable-coverage)
+    [ "$FEATURE_DTRACE" = true ] && CONFIG_OPTS+=(--enable-dtrace)
+    [ "$FEATURE_TAP_TESTS" = true ] && CONFIG_OPTS+=(--enable-tap-tests)
+    [ "$FEATURE_SERVERLESS" = true ] && CONFIG_OPTS+=(--enable-serverless)
+    [ "$FEATURE_SHARED_POSTGRES_BACKEND" = true ] && CONFIG_OPTS+=(--enable-shared-postgres-backend) || CONFIG_OPTS+=(--disable-shared-postgres-backend)
+    [ "$FEATURE_LINK_POSTGRES_WITH_SHARED" = true ] && CONFIG_OPTS+=(--enable-link-postgres-with-shared) || CONFIG_OPTS+=(--disable-link-postgres-with-shared)
+    [ "$FEATURE_CATALOG_EXT" = true ] && CONFIG_OPTS+=(--enable-catalog-ext) || CONFIG_OPTS+=(--disable-catalog-ext)
+
+    # Environment Setup for Configure
+    export CC=gcc
+    export CXX=g++
+    
+    # Set LD_LIBRARY_PATH for Xerces-C and Cloudberry libraries
+    export LD_LIBRARY_PATH="/usr/local/xerces-c/lib:/usr/local/cloudberry-db/lib:$LD_LIBRARY_PATH"
+    
     # Run Configure
-    local configure_cmd="sudo -u \"$GPADMIN_USER\" LD_LIBRARY_PATH=\"$LD_LIBRARY_PATH\" ./configure ${CONFIG_OPTS[*]}"
+    local configure_cmd="./configure ${CONFIG_OPTS[*]}"
     run_with_header "Configuring Cloudberry" \
         "$configure_cmd" || fail "Configure failed. See $LOG_FILE"
 
