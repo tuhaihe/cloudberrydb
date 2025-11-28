@@ -78,28 +78,52 @@ fail() {
     exit 1
 }
 
-# Enhanced command execution with fixed header display
+# Enhanced command execution with persistent header and live output
 run_with_header() {
     local step_name="$1"
     local cmd="$2"
     local log_to_file="${3:-true}"
     
-    # Print header
+    # Print initial header
+    local header_line1="╔════════════════════════════════════════════════════════════════════════════╗"
+    local header_line2="║ STEP: $step_name"
+    local header_line3="╚════════════════════════════════════════════════════════════════════════════╝"
+    
     echo ""
-    echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC} ${GREEN}STEP:${NC} $step_name"
-    echo -e "${BLUE}║${NC} ${GREEN}CMD: ${NC}$cmd"
-    echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${BLUE}${header_line1}${NC}"
+    echo -e "${BLUE}${header_line2}${NC}"
+    echo -e "${BLUE}${header_line3}${NC}"
     echo ""
     
-    # Execute command
+    # Create a temporary file for output
+    local temp_output=$(mktemp)
+    
+    # Execute command and capture output with line prefixes
     if [ "$log_to_file" = true ]; then
-        eval "$cmd" 2>&1 | tee -a "$LOG_FILE"
-        return ${PIPESTATUS[0]}
+        (eval "$cmd" 2>&1 || echo "EXIT_CODE=$?" > "${temp_output}.exit") | while IFS= read -r line; do
+            # Print with step indicator prefix
+            echo -e "${BLUE}▶${NC} $line"
+            echo "$line" >> "$LOG_FILE"
+        done
+        
+        # Check exit code
+        if [ -f "${temp_output}.exit" ]; then
+            local exit_code=$(grep EXIT_CODE "${temp_output}.exit" | cut -d= -f2)
+            rm -f "${temp_output}.exit"
+            rm -f "$temp_output"
+            return ${exit_code:-1}
+        fi
     else
-        eval "$cmd"
-        return $?
+        eval "$cmd" 2>&1 | while IFS= read -r line; do
+            echo -e "${BLUE}▶${NC} $line"
+        done
+        local result=${PIPESTATUS[0]}
+        rm -f "$temp_output"
+        return $result
     fi
+    
+    rm -f "$temp_output"
+    return 0
 }
 
 check_root() {
@@ -141,85 +165,106 @@ select_features() {
         return
     fi
 
-    # Check if whiptail is available
-    if ! command -v whiptail &> /dev/null; then
-        warn "whiptail not found. Falling back to simple menu."
-        select_features_simple
-        return
-    fi
-
-    # Build checklist options (tag "description" status)
-    local options=()
-    options+=("ORCA" "Query Optimizer" "$([ "$FEATURE_ORCA" = true ] && echo "ON" || echo "OFF")")
-    options+=("PXF" "Platform Extension Framework" "$([ "$FEATURE_PXF" = true ] && echo "ON" || echo "OFF")")
-    options+=("GSSAPI" "Kerberos Authentication" "$([ "$FEATURE_GSSAPI" = true ] && echo "ON" || echo "OFF")")
-    options+=("LDAP" "LDAP Authentication" "$([ "$FEATURE_LDAP" = true ] && echo "ON" || echo "OFF")")
-    options+=("XML" "XML Support" "$([ "$FEATURE_XML" = true ] && echo "ON" || echo "OFF")")
-    options+=("LZ4" "LZ4 Compression" "$([ "$FEATURE_LZ4" = true ] && echo "ON" || echo "OFF")")
-    options+=("ZSTD" "ZSTD Compression" "$([ "$FEATURE_ZSTD" = true ] && echo "ON" || echo "OFF")")
-    options+=("PAM" "PAM Authentication" "$([ "$FEATURE_PAM" = true ] && echo "ON" || echo "OFF")")
-    options+=("PERL" "Perl Language Support" "$([ "$FEATURE_PERL" = true ] && echo "ON" || echo "OFF")")
-    options+=("PYTHON" "Python Language Support" "$([ "$FEATURE_PYTHON" = true ] && echo "ON" || echo "OFF")")
-    options+=("ICU" "ICU (Unicode)" "$([ "$FEATURE_ICU" = true ] && echo "ON" || echo "OFF")")
-    options+=("SELINUX" "SELinux Support" "$([ "$FEATURE_SELINUX" = true ] && echo "ON" || echo "OFF")")
-    options+=("SECCOMP" "Seccomp Support" "$([ "$FEATURE_SECCOMP" = true ] && echo "ON" || echo "OFF")")
-    options+=("SYSTEMD" "Systemd Support" "$([ "$FEATURE_SYSTEMD" = true ] && echo "ON" || echo "OFF")")
-    options+=("UUID" "UUID Support" "$([ "$FEATURE_UUID" = true ] && echo "ON" || echo "OFF")")
-    options+=("XSLT" "XSLT Support" "$([ "$FEATURE_XSLT" = true ] && echo "ON" || echo "OFF")")
-    options+=("PAX" "PAX Storage Format" "$([ "$FEATURE_PAX" = true ] && echo "ON" || echo "OFF")")
-    options+=("GPFDIST" "gpfdist Tool" "$([ "$FEATURE_GPFDIST" = true ] && echo "ON" || echo "OFF")")
-    options+=("MAPREDUCE" "MapReduce Support" "$([ "$FEATURE_MAPREDUCE" = true ] && echo "ON" || echo "OFF")")
-    options+=("IC_PROXY" "Interconnect Proxy" "$([ "$FEATURE_IC_PROXY" = true ] && echo "ON" || echo "OFF")")
-    options+=("DEBUG" "Debug Build" "$([ "$FEATURE_DEBUG" = true ] && echo "ON" || echo "OFF")")
-
-    # Show checklist
-    local selected
-    selected=$(whiptail --title "Apache Cloudberry Build Configuration" \
-        --checklist "Use SPACE to toggle, ARROW keys to navigate, ENTER to confirm:" \
-        25 78 21 \
-        "${options[@]}" \
-        3>&1 1>&2 2>&3)
-
-    # Check if user cancelled
-    if [ $? -ne 0 ]; then
-        info "Using default configuration."
-        return
-    fi
-
-    # Reset all features to false
-    FEATURE_ORCA=false
-    FEATURE_PXF=false
-    FEATURE_GSSAPI=false
-    FEATURE_LDAP=false
-    FEATURE_XML=false
-    FEATURE_LZ4=false
-    FEATURE_ZSTD=false
-    FEATURE_PAM=false
-    FEATURE_PERL=false
-    FEATURE_PYTHON=false
-    FEATURE_ICU=false
-    FEATURE_SELINUX=false
-    FEATURE_SECCOMP=false
-    FEATURE_SYSTEMD=false
-    FEATURE_UUID=false
-    FEATURE_XSLT=false
-    FEATURE_PAX=false
-    FEATURE_GPFDIST=false
-    FEATURE_MAPREDUCE=false
-    FEATURE_IC_PROXY=false
-    FEATURE_DEBUG=false
-
-    # Set selected features to true
-    for feature in $selected; do
-        # Remove quotes
-        feature=$(echo "$feature" | tr -d '"')
-        local var_name="FEATURE_$feature"
-        eval "$var_name=true"
+    # Pure Bash interactive menu - no external dependencies needed
+    local features=(
+        "ORCA:Query Optimizer:$FEATURE_ORCA"
+        "PXF:Platform Extension Framework:$FEATURE_PXF"
+        "GSSAPI:Kerberos Authentication:$FEATURE_GSSAPI"
+        "LDAP:LDAP Authentication:$FEATURE_LDAP"
+        "XML:XML Support:$FEATURE_XML"
+        "LZ4:LZ4 Compression:$FEATURE_LZ4"
+        "ZSTD:ZSTD Compression:$FEATURE_ZSTD"
+        "PAM:PAM Authentication:$FEATURE_PAM"
+        "PERL:Perl Language Support:$FEATURE_PERL"
+        "PYTHON:Python Language Support:$FEATURE_PYTHON"
+        "ICU:ICU (Unicode):$FEATURE_ICU"
+        "SELINUX:SELinux Support:$FEATURE_SELINUX"
+        "SECCOMP:Seccomp Support:$FEATURE_SECCOMP"
+        "SYSTEMD:Systemd Support:$FEATURE_SYSTEMD"
+        "UUID:UUID Support:$FEATURE_UUID"
+        "XSLT:XSLT Support:$FEATURE_XSLT"
+        "PAX:PAX Storage Format:$FEATURE_PAX"
+        "GPFDIST:gpfdist Tool:$FEATURE_GPFDIST"
+        "MAPREDUCE:MapReduce Support:$FEATURE_MAPREDUCE"
+        "IC_PROXY:Interconnect Proxy:$FEATURE_IC_PROXY"
+        "DEBUG:Debug Build:$FEATURE_DEBUG"
+    )
+    
+    local selected=0
+    local total=${#features[@]}
+    
+    # Function to draw menu
+    draw_menu() {
+        clear
+        echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${BLUE}║${NC}          ${GREEN}Apache Cloudberry Build Configuration${NC}                      ${BLUE}║${NC}"
+        echo -e "${BLUE}╠════════════════════════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${BLUE}║${NC} Use ↑/↓ arrows to navigate, SPACE to toggle, ENTER to confirm           ${BLUE}║${NC}"
+        echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        
+        for i in "${!features[@]}"; do
+            IFS=':' read -r name desc status <<< "${features[$i]}"
+            
+            local checkbox="[ ]"
+            if [ "$status" = "true" ]; then
+                checkbox="[${GREEN}✓${NC}]"
+            fi
+            
+            if [ $i -eq $selected ]; then
+                echo -e " ${BLUE}▶${NC} $checkbox ${YELLOW}$name${NC} - $desc"
+            else
+                echo -e "   $checkbox $name - $desc"
+            fi
+        done
+        
+        echo ""
+        echo -e "${BLUE}Installation Path:${NC} $INSTALL_DIR"
+    }
+    
+    # Main menu loop
+    while true; do
+        draw_menu
+        
+        # Read single character
+        read -rsn1 key
+        
+        # Handle arrow keys (they send 3 characters: ESC [ A/B)
+        if [ "$key" = $'\x1b' ]; then
+            read -rsn2 -t 0.1 key
+            case "$key" in
+                '[A') # Up arrow
+                    ((selected--))
+                    [ $selected -lt 0 ] && selected=$((total - 1))
+                    ;;
+                '[B') # Down arrow
+                    ((selected++))
+                    [ $selected -ge $total ] && selected=0
+                    ;;
+            esac
+        elif [ "$key" = " " ]; then
+            # Space - toggle current item
+            IFS=':' read -r name desc status <<< "${features[$selected]}"
+            if [ "$status" = "true" ]; then
+                features[$selected]="$name:$desc:false"
+            else
+                features[$selected]="$name:$desc:true"
+            fi
+        elif [ "$key" = "" ]; then
+            # Enter - confirm and exit
+            break
+        fi
     done
+    
+    # Apply selections
+    for feature in "${features[@]}"; do
+        IFS=':' read -r name desc status <<< "$feature"
+        local var_name="FEATURE_$name"
+        eval "$var_name=$status"
+    done
+    
+    clear
 }
-
-# Fallback simple menu (original implementation)
-select_features_simple() {
     while true; do
         clear
         echo -e "${BLUE}=== Apache Cloudberry Build Configuration ===${NC}"
