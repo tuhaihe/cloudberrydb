@@ -538,7 +538,7 @@ install_dependencies() {
         [ "$FEATURE_ICU" = true ] && FEATURE_DEPS+=(libicu-devel)
         [ "$FEATURE_SELINUX" = true ] && FEATURE_DEPS+=(libselinux-devel)
         [ "$FEATURE_SECCOMP" = true ] && FEATURE_DEPS+=(libseccomp-devel)
-        [ "$FEATURE_SYSTEMD" = true ] && FEATURE_DEPS+?(systemd-devel)
+        [ "$FEATURE_SYSTEMD" = true ] && FEATURE_DEPS+=(systemd-devel)
         [ "$FEATURE_UUID" = true ] && FEATURE_DEPS+=(libuuid-devel)
         [ "$FEATURE_XSLT" = true ] && FEATURE_DEPS+=(libxslt-devel)
         [ "$FEATURE_GPFDIST" = true ] && FEATURE_DEPS+=(libevent-devel apr-devel libyaml-devel)
