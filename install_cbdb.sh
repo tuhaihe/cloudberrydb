@@ -387,6 +387,10 @@ build_and_install() {
         fail "Cannot find 'configure' script. Please run from source root."
     fi
 
+    # Ensure source directory is owned by gpadmin for build process
+    info "Setting ownership of source directory to $GPADMIN_USER..."
+    chown -R "$GPADMIN_USER:$GPADMIN_USER" .
+
     # Create install dir
     mkdir -p "$INSTALL_DIR"
     chown -R "$GPADMIN_USER:$GPADMIN_USER" "$INSTALL_DIR"
