@@ -78,6 +78,30 @@ fail() {
     exit 1
 }
 
+# Enhanced command execution with fixed header display
+run_with_header() {
+    local step_name="$1"
+    local cmd="$2"
+    local log_to_file="${3:-true}"
+    
+    # Print header
+    echo ""
+    echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║${NC} ${GREEN}STEP:${NC} $step_name"
+    echo -e "${BLUE}║${NC} ${GREEN}CMD: ${NC}$cmd"
+    echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    
+    # Execute command
+    if [ "$log_to_file" = true ]; then
+        eval "$cmd" 2>&1 | tee -a "$LOG_FILE"
+        return ${PIPESTATUS[0]}
+    else
+        eval "$cmd"
+        return $?
+    fi
+}
+
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         fail "This script must be run as root or with sudo."
@@ -117,6 +141,85 @@ select_features() {
         return
     fi
 
+    # Check if whiptail is available
+    if ! command -v whiptail &> /dev/null; then
+        warn "whiptail not found. Falling back to simple menu."
+        select_features_simple
+        return
+    fi
+
+    # Build checklist options (tag "description" status)
+    local options=()
+    options+=("ORCA" "Query Optimizer" "$([ "$FEATURE_ORCA" = true ] && echo "ON" || echo "OFF")")
+    options+=("PXF" "Platform Extension Framework" "$([ "$FEATURE_PXF" = true ] && echo "ON" || echo "OFF")")
+    options+=("GSSAPI" "Kerberos Authentication" "$([ "$FEATURE_GSSAPI" = true ] && echo "ON" || echo "OFF")")
+    options+=("LDAP" "LDAP Authentication" "$([ "$FEATURE_LDAP" = true ] && echo "ON" || echo "OFF")")
+    options+=("XML" "XML Support" "$([ "$FEATURE_XML" = true ] && echo "ON" || echo "OFF")")
+    options+=("LZ4" "LZ4 Compression" "$([ "$FEATURE_LZ4" = true ] && echo "ON" || echo "OFF")")
+    options+=("ZSTD" "ZSTD Compression" "$([ "$FEATURE_ZSTD" = true ] && echo "ON" || echo "OFF")")
+    options+=("PAM" "PAM Authentication" "$([ "$FEATURE_PAM" = true ] && echo "ON" || echo "OFF")")
+    options+=("PERL" "Perl Language Support" "$([ "$FEATURE_PERL" = true ] && echo "ON" || echo "OFF")")
+    options+=("PYTHON" "Python Language Support" "$([ "$FEATURE_PYTHON" = true ] && echo "ON" || echo "OFF")")
+    options+=("ICU" "ICU (Unicode)" "$([ "$FEATURE_ICU" = true ] && echo "ON" || echo "OFF")")
+    options+=("SELINUX" "SELinux Support" "$([ "$FEATURE_SELINUX" = true ] && echo "ON" || echo "OFF")")
+    options+=("SECCOMP" "Seccomp Support" "$([ "$FEATURE_SECCOMP" = true ] && echo "ON" || echo "OFF")")
+    options+=("SYSTEMD" "Systemd Support" "$([ "$FEATURE_SYSTEMD" = true ] && echo "ON" || echo "OFF")")
+    options+=("UUID" "UUID Support" "$([ "$FEATURE_UUID" = true ] && echo "ON" || echo "OFF")")
+    options+=("XSLT" "XSLT Support" "$([ "$FEATURE_XSLT" = true ] && echo "ON" || echo "OFF")")
+    options+=("PAX" "PAX Storage Format" "$([ "$FEATURE_PAX" = true ] && echo "ON" || echo "OFF")")
+    options+=("GPFDIST" "gpfdist Tool" "$([ "$FEATURE_GPFDIST" = true ] && echo "ON" || echo "OFF")")
+    options+=("MAPREDUCE" "MapReduce Support" "$([ "$FEATURE_MAPREDUCE" = true ] && echo "ON" || echo "OFF")")
+    options+=("IC_PROXY" "Interconnect Proxy" "$([ "$FEATURE_IC_PROXY" = true ] && echo "ON" || echo "OFF")")
+    options+=("DEBUG" "Debug Build" "$([ "$FEATURE_DEBUG" = true ] && echo "ON" || echo "OFF")")
+
+    # Show checklist
+    local selected
+    selected=$(whiptail --title "Apache Cloudberry Build Configuration" \
+        --checklist "Use SPACE to toggle, ARROW keys to navigate, ENTER to confirm:" \
+        25 78 21 \
+        "${options[@]}" \
+        3>&1 1>&2 2>&3)
+
+    # Check if user cancelled
+    if [ $? -ne 0 ]; then
+        info "Using default configuration."
+        return
+    fi
+
+    # Reset all features to false
+    FEATURE_ORCA=false
+    FEATURE_PXF=false
+    FEATURE_GSSAPI=false
+    FEATURE_LDAP=false
+    FEATURE_XML=false
+    FEATURE_LZ4=false
+    FEATURE_ZSTD=false
+    FEATURE_PAM=false
+    FEATURE_PERL=false
+    FEATURE_PYTHON=false
+    FEATURE_ICU=false
+    FEATURE_SELINUX=false
+    FEATURE_SECCOMP=false
+    FEATURE_SYSTEMD=false
+    FEATURE_UUID=false
+    FEATURE_XSLT=false
+    FEATURE_PAX=false
+    FEATURE_GPFDIST=false
+    FEATURE_MAPREDUCE=false
+    FEATURE_IC_PROXY=false
+    FEATURE_DEBUG=false
+
+    # Set selected features to true
+    for feature in $selected; do
+        # Remove quotes
+        feature=$(echo "$feature" | tr -d '"')
+        local var_name="FEATURE_$feature"
+        eval "$var_name=true"
+    done
+}
+
+# Fallback simple menu (original implementation)
+select_features_simple() {
     while true; do
         clear
         echo -e "${BLUE}=== Apache Cloudberry Build Configuration ===${NC}"
@@ -225,7 +328,9 @@ install_dependencies() {
         fi
         
         # Install
-        dnf install -y "${BASE_DEPS[@]}" "${FEATURE_DEPS[@]}"
+        local all_deps=("${BASE_DEPS[@]}" "${FEATURE_DEPS[@]}")
+        run_with_header "Installing Dependencies (RHEL/Rocky/CentOS)" \
+            "dnf install -y ${all_deps[*]}"
 
     elif [[ "$OS_ID" == "ubuntu" ]]; then
         # Ubuntu
@@ -260,7 +365,9 @@ install_dependencies() {
             FEATURE_DEPS+=(cmake libprotobuf-dev protobuf-compiler)
         fi
 
-        apt-get install -y "${BASE_DEPS[@]}" "${FEATURE_DEPS[@]}"
+        local all_deps=("${BASE_DEPS[@]}" "${FEATURE_DEPS[@]}")
+        run_with_header "Installing Dependencies (Ubuntu)" \
+            "apt-get install -y ${all_deps[*]}"
     else
         fail "Unsupported OS: $OS_ID"
     fi
@@ -331,12 +438,24 @@ install_xerces() {
     local XERCES_URL="https://archive.apache.org/dist/xerces/c/3/sources/xerces-c-${XERCES_VER}.tar.gz"
     
     pushd /tmp > /dev/null
-    wget -q "$XERCES_URL" -O xerces-c.tar.gz
-    tar xf xerces-c.tar.gz
+    
+    run_with_header "Downloading Xerces-C ${XERCES_VER}" \
+        "wget -nv '$XERCES_URL' -O xerces-c.tar.gz" || fail "Failed to download Xerces-C"
+    
+    run_with_header "Extracting Xerces-C" \
+        "tar xf xerces-c.tar.gz" || fail "Failed to extract Xerces-C"
+    
     cd "xerces-c-${XERCES_VER}"
-    ./configure --prefix=/usr/local/xerces-c --disable-network
-    make -j$(nproc)
-    make install
+    
+    run_with_header "Configuring Xerces-C" \
+        "./configure --prefix=/usr/local/xerces-c --disable-network" || fail "Xerces-C configure failed"
+    
+    run_with_header "Building Xerces-C" \
+        "make -j\$(nproc)" || fail "Xerces-C build failed"
+    
+    run_with_header "Installing Xerces-C" \
+        "make install" || fail "Xerces-C install failed"
+    
     popd > /dev/null
     rm -rf "/tmp/xerces-c-${XERCES_VER}" "/tmp/xerces-c.tar.gz"
     
@@ -367,8 +486,8 @@ prepare_pax_submodules() {
         )
         
         for sub in "${PAX_SUBMODULES[@]}"; do
-            info "Updating submodule: $sub"
-            git submodule update --init --recursive "$sub" || warn "Failed to update submodule $sub. Build might fail."
+            run_with_header "Updating PAX Submodule: $(basename $sub)" \
+                "git submodule update --init --recursive \"$sub\"" || warn "Failed to update submodule $sub. Build might fail."
         done
     else
         warn "Not a git repository. Skipping submodule update. Ensure source code is complete."
@@ -391,8 +510,25 @@ build_and_install() {
     info "Setting ownership of source directory to $GPADMIN_USER..."
     chown -R "$GPADMIN_USER:$GPADMIN_USER" .
 
-    # Create install dir
-    mkdir -p "$INSTALL_DIR"
+    # Prepare install directory and copy required libraries
+    info "Preparing installation directory..."
+    rm -rf "$INSTALL_DIR"
+    chmod a+w /usr/local
+    
+    if [[ "$OS_ID" =~ ^(centos|rhel|rocky|almalinux)$ ]]; then
+        # Rocky/RHEL: Create lib directory and copy Xerces-C libraries if ORCA is enabled
+        mkdir -p "$INSTALL_DIR/lib"
+        if [ "$FEATURE_ORCA" = true ]; then
+            info "Copying Xerces-C libraries to $INSTALL_DIR/lib..."
+            cp -v /usr/local/xerces-c/lib/libxerces-c.so \
+                  /usr/local/xerces-c/lib/libxerces-c-3.*.so \
+                  "$INSTALL_DIR/lib"
+        fi
+    elif [[ "$OS_ID" == "ubuntu" ]]; then
+        # Ubuntu: Just create the directory (uses system xerces-c)
+        mkdir -p "$INSTALL_DIR"
+    fi
+    
     chown -R "$GPADMIN_USER:$GPADMIN_USER" "$INSTALL_DIR"
 
     # Construct Configure Options
@@ -424,26 +560,32 @@ build_and_install() {
     # Always enable these for standard build
     CONFIG_OPTS+=("--with-openssl" "--with-libbz2" "--with-zlib")
 
+    # Setup LD_LIBRARY_PATH for configure and build
+    export LD_LIBRARY_PATH="/usr/local/cloudberry-db/lib:${LD_LIBRARY_PATH:-}"
+    
     # Xerces paths if ORCA enabled
     if [ "$FEATURE_ORCA" = true ]; then
         CONFIG_OPTS+=("--with-includes=/usr/local/xerces-c/include" "--with-libraries=/usr/local/xerces-c/lib")
+        # Add xerces-c to LD_LIBRARY_PATH so configure can find it during test program execution
+        export LD_LIBRARY_PATH="/usr/local/xerces-c/lib:$LD_LIBRARY_PATH"
     fi
 
     # Run Configure
-    info "Running ./configure ${CONFIG_OPTS[*]}"
-    sudo -u "$GPADMIN_USER" ./configure "${CONFIG_OPTS[@]}" > "$LOG_FILE" 2>&1 || fail "Configure failed. See $LOG_FILE"
+    local configure_cmd="sudo -u \"$GPADMIN_USER\" LD_LIBRARY_PATH=\"$LD_LIBRARY_PATH\" ./configure ${CONFIG_OPTS[*]}"
+    run_with_header "Configuring Cloudberry" \
+        "$configure_cmd" || fail "Configure failed. See $LOG_FILE"
 
     # Run Make
-    info "Running make..."
-    sudo -u "$GPADMIN_USER" make -j$(nproc) >> "$LOG_FILE" 2>&1 || fail "Make failed. See $LOG_FILE"
+    run_with_header "Building Cloudberry (make -j\$(nproc))" \
+        "sudo -u \"$GPADMIN_USER\" make -j\$(nproc)" || fail "Make failed. See $LOG_FILE"
 
     # Run Make Install
-    info "Running make install..."
-    sudo -u "$GPADMIN_USER" make install >> "$LOG_FILE" 2>&1 || fail "Make install failed. See $LOG_FILE"
+    run_with_header "Installing Cloudberry (make install)" \
+        "sudo -u \"$GPADMIN_USER\" make install" || fail "Make install failed. See $LOG_FILE"
     
     # Contrib
-    info "Building contrib modules..."
-    sudo -u "$GPADMIN_USER" make -C contrib -j$(nproc) install >> "$LOG_FILE" 2>&1 || fail "Contrib install failed. See $LOG_FILE"
+    run_with_header "Building Contrib Modules (make -C contrib install)" \
+        "sudo -u \"$GPADMIN_USER\" make -C contrib -j\$(nproc) install" || fail "Contrib install failed. See $LOG_FILE"
 
     info "Build and installation complete!"
 }
