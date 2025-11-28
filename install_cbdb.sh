@@ -299,9 +299,9 @@ EOF
     if [ ! -f "/home/$GPADMIN_USER/.ssh/id_rsa" ]; then
         info "Generating SSH keys..."
         sudo -u "$GPADMIN_USER" ssh-keygen -t rsa -N "" -f "/home/$GPADMIN_USER/.ssh/id_rsa"
-        sudo -u "$GPADMIN_USER" cat "/home/$GPADMIN_USER/.ssh/id_rsa.pub" >> "/home/$GPADMIN_USER/.ssh/authorized_keys"
+        sudo -u "$GPADMIN_USER" bash -c "cat /home/$GPADMIN_USER/.ssh/id_rsa.pub >> /home/$GPADMIN_USER/.ssh/authorized_keys"
         sudo -u "$GPADMIN_USER" chmod 600 "/home/$GPADMIN_USER/.ssh/authorized_keys"
-        sudo -u "$GPADMIN_USER" ssh-keyscan -H localhost 127.0.0.1 >> "/home/$GPADMIN_USER/.ssh/known_hosts" 2>/dev/null
+        sudo -u "$GPADMIN_USER" bash -c "ssh-keyscan -H localhost 127.0.0.1 >> /home/$GPADMIN_USER/.ssh/known_hosts 2>/dev/null"
     fi
     
     # Enable Password Auth
