@@ -427,10 +427,10 @@ select_features_numeric() {
                 local mark2="[ ]"
                 [ "$status2" = "true" ] && mark2="[${GREEN}x${NC}]"
                 local idx2=$((j+1))
-                right_col=$(printf "%2d) %s %-10s" "$idx2" "$mark2" "$name2")
+                right_col=$(printf "%2d) %b %-10s" "$idx2" "$mark2" "$name2")
             fi
             
-            printf " %2d) %s %-12s  │  %s\n" "$idx1" "$mark1" "$name1" "$right_col"
+            printf " %2d) %b %-12s  │  %s\n" "$idx1" "$mark1" "$name1" "$right_col"
         done
         
         echo ""
@@ -649,10 +649,18 @@ EOF
     # SSH Setup
     if [ ! -f "/home/$GPADMIN_USER/.ssh/id_rsa" ]; then
         info "Generating SSH keys..."
-        sudo -u "$GPADMIN_USER" ssh-keygen -t rsa -N "" -f "/home/$GPADMIN_USER/.ssh/id_rsa"
-        sudo -u "$GPADMIN_USER" bash -c "cat /home/$GPADMIN_USER/.ssh/id_rsa.pub >> /home/$GPADMIN_USER/.ssh/authorized_keys"
-        sudo -u "$GPADMIN_USER" chmod 600 "/home/$GPADMIN_USER/.ssh/authorized_keys"
-        sudo -u "$GPADMIN_USER" bash -c "ssh-keyscan -H localhost 127.0.0.1 >> /home/$GPADMIN_USER/.ssh/known_hosts 2>/dev/null"
+        # Use run_with_header to handle SSH key generation with proper error handling
+        run_with_header "Generating SSH keys for $GPADMIN_USER" \
+            "sudo -u '$GPADMIN_USER' ssh-keygen -t rsa -N '' -f '/home/$GPADMIN_USER/.ssh/id_rsa' -q" false
+        
+        run_with_header "Configuring SSH authorized_keys" \
+            "sudo -u '$GPADMIN_USER' bash -c 'cat /home/$GPADMIN_USER/.ssh/id_rsa.pub >> /home/$GPADMIN_USER/.ssh/authorized_keys'" false
+        
+        run_with_header "Setting SSH permissions" \
+            "sudo -u '$GPADMIN_USER' chmod 600 '/home/$GPADMIN_USER/.ssh/authorized_keys'" false
+        
+        run_with_header "Adding known hosts" \
+            "sudo -u '$GPADMIN_USER' bash -c 'ssh-keyscan -H localhost 127.0.0.1 >> /home/$GPADMIN_USER/.ssh/known_hosts 2>/dev/null || true'" false
     fi
     
     # Enable Password Auth
