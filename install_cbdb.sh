@@ -165,7 +165,109 @@ select_features() {
         return
     fi
 
-    # Pure Bash interactive menu - no external dependencies needed
+    # Check if whiptail is available
+    if ! command -v whiptail &> /dev/null; then
+        echo ""
+        echo -e "${YELLOW}Whiptail is not installed. It provides a better graphical menu experience.${NC}"
+        read -p "Do you want to install it now? [Y/n] " choice
+        choice=${choice:-Y}
+        
+        if [[ "$choice" =~ ^[Yy]$ ]]; then
+            info "Installing whiptail..."
+            if [[ "$OS_ID" =~ ^(centos|rhel|rocky|almalinux)$ ]]; then
+                sudo dnf install -y newt >/dev/null 2>&1
+            elif [[ "$OS_ID" == "ubuntu" ]]; then
+                sudo apt-get update >/dev/null 2>&1
+                sudo apt-get install -y whiptail >/dev/null 2>&1
+            fi
+        fi
+    fi
+
+    # Try to use whiptail if available
+    if command -v whiptail &> /dev/null; then
+        select_features_whiptail
+    else
+        info "Whiptail not available. Using standard menu."
+        sleep 1
+        select_features_numeric
+    fi
+}
+
+select_features_whiptail() {
+    # Build checklist options (tag "description" status)
+    local options=()
+    options+=("ORCA" "Query Optimizer" "$([ "$FEATURE_ORCA" = true ] && echo "ON" || echo "OFF")")
+    options+=("PXF" "Platform Extension Framework" "$([ "$FEATURE_PXF" = true ] && echo "ON" || echo "OFF")")
+    options+=("GSSAPI" "Kerberos Authentication" "$([ "$FEATURE_GSSAPI" = true ] && echo "ON" || echo "OFF")")
+    options+=("LDAP" "LDAP Authentication" "$([ "$FEATURE_LDAP" = true ] && echo "ON" || echo "OFF")")
+    options+=("XML" "XML Support" "$([ "$FEATURE_XML" = true ] && echo "ON" || echo "OFF")")
+    options+=("LZ4" "LZ4 Compression" "$([ "$FEATURE_LZ4" = true ] && echo "ON" || echo "OFF")")
+    options+=("ZSTD" "ZSTD Compression" "$([ "$FEATURE_ZSTD" = true ] && echo "ON" || echo "OFF")")
+    options+=("PAM" "PAM Authentication" "$([ "$FEATURE_PAM" = true ] && echo "ON" || echo "OFF")")
+    options+=("PERL" "Perl Language Support" "$([ "$FEATURE_PERL" = true ] && echo "ON" || echo "OFF")")
+    options+=("PYTHON" "Python Language Support" "$([ "$FEATURE_PYTHON" = true ] && echo "ON" || echo "OFF")")
+    options+=("ICU" "ICU (Unicode)" "$([ "$FEATURE_ICU" = true ] && echo "ON" || echo "OFF")")
+    options+=("SELINUX" "SELinux Support" "$([ "$FEATURE_SELINUX" = true ] && echo "ON" || echo "OFF")")
+    options+=("SECCOMP" "Seccomp Support" "$([ "$FEATURE_SECCOMP" = true ] && echo "ON" || echo "OFF")")
+    options+=("SYSTEMD" "Systemd Support" "$([ "$FEATURE_SYSTEMD" = true ] && echo "ON" || echo "OFF")")
+    options+=("UUID" "UUID Support" "$([ "$FEATURE_UUID" = true ] && echo "ON" || echo "OFF")")
+    options+=("XSLT" "XSLT Support" "$([ "$FEATURE_XSLT" = true ] && echo "ON" || echo "OFF")")
+    options+=("PAX" "PAX Storage Format" "$([ "$FEATURE_PAX" = true ] && echo "ON" || echo "OFF")")
+    options+=("GPFDIST" "gpfdist Tool" "$([ "$FEATURE_GPFDIST" = true ] && echo "ON" || echo "OFF")")
+    options+=("MAPREDUCE" "MapReduce Support" "$([ "$FEATURE_MAPREDUCE" = true ] && echo "ON" || echo "OFF")")
+    options+=("IC_PROXY" "Interconnect Proxy" "$([ "$FEATURE_IC_PROXY" = true ] && echo "ON" || echo "OFF")")
+    options+=("DEBUG" "Debug Build" "$([ "$FEATURE_DEBUG" = true ] && echo "ON" || echo "OFF")")
+
+    # Show checklist
+    local selected
+    selected=$(whiptail --title "Apache Cloudberry Build Configuration" \
+        --checklist "Use SPACE to toggle, ARROW keys to navigate, ENTER to confirm:" \
+        25 78 21 \
+        "${options[@]}" \
+        3>&1 1>&2 2>&3)
+
+    # Check if user cancelled
+    if [ $? -ne 0 ]; then
+        info "Using default configuration."
+        return
+    fi
+
+    # Reset all features to false
+    FEATURE_ORCA=false
+    FEATURE_PXF=false
+    FEATURE_GSSAPI=false
+    FEATURE_LDAP=false
+    FEATURE_XML=false
+    FEATURE_LZ4=false
+    FEATURE_ZSTD=false
+    FEATURE_PAM=false
+    FEATURE_PERL=false
+    FEATURE_PYTHON=false
+    FEATURE_ICU=false
+    FEATURE_SELINUX=false
+    FEATURE_SECCOMP=false
+    FEATURE_SYSTEMD=false
+    FEATURE_UUID=false
+    FEATURE_XSLT=false
+    FEATURE_PAX=false
+    FEATURE_GPFDIST=false
+    FEATURE_MAPREDUCE=false
+    FEATURE_IC_PROXY=false
+    FEATURE_DEBUG=false
+
+    # Set selected features to true
+    for feature in $selected; do
+        # Remove quotes
+        feature=$(echo "$feature" | tr -d '"')
+        local var_name="FEATURE_$feature"
+        eval "$var_name=true"
+    done
+}
+select_features_numeric() {
+    if [ "$INTERACTIVE" = false ]; then
+        return
+    fi
+
     local features=(
         "ORCA:Query Optimizer:$FEATURE_ORCA"
         "PXF:Platform Extension Framework:$FEATURE_PXF"
@@ -190,84 +292,74 @@ select_features() {
         "DEBUG:Debug Build:$FEATURE_DEBUG"
     )
     
-    local selected=0
-    local total=${#features[@]}
-    
-    # Function to draw menu
-    draw_menu() {
+    while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════════════╗${NC}"
         echo -e "${BLUE}║${NC}          ${GREEN}Apache Cloudberry Build Configuration${NC}                      ${BLUE}║${NC}"
         echo -e "${BLUE}╠════════════════════════════════════════════════════════════════════════════╣${NC}"
-        echo -e "${BLUE}║${NC} Use ↑/↓ arrows to navigate, SPACE to toggle, ENTER to confirm           ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC} Enter number to toggle feature, or command below:                       ${BLUE}║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════════════╝${NC}"
         echo ""
         
-        for i in "${!features[@]}"; do
-            IFS=':' read -r name desc status <<< "${features[$i]}"
+        # Display features in two columns
+        local half=$(( (${#features[@]} + 1) / 2 ))
+        for ((i=0; i<half; i++)); do
+            # Left column
+            IFS=':' read -r name1 desc1 status1 <<< "${features[$i]}"
+            local mark1="[ ]"
+            [ "$status1" = "true" ] && mark1="[${GREEN}x${NC}]"
+            local idx1=$((i+1))
             
-            local checkbox="[ ]"
-            if [ "$status" = "true" ]; then
-                checkbox="[${GREEN}✓${NC}]"
+            # Right column
+            local j=$((i + half))
+            local right_col=""
+            if [ $j -lt ${#features[@]} ]; then
+                IFS=':' read -r name2 desc2 status2 <<< "${features[$j]}"
+                local mark2="[ ]"
+                [ "$status2" = "true" ] && mark2="[${GREEN}x${NC}]"
+                local idx2=$((j+1))
+                right_col=$(printf "%2d) %s %-10s" "$idx2" "$mark2" "$name2")
             fi
             
-            if [ $i -eq $selected ]; then
-                echo -e " ${BLUE}▶${NC} $checkbox ${YELLOW}$name${NC} - $desc"
-            else
-                echo -e "   $checkbox $name - $desc"
-            fi
+            printf " %2d) %s %-12s  │  %s\n" "$idx1" "$mark1" "$name1" "$right_col"
         done
         
         echo ""
         echo -e "${BLUE}Installation Path:${NC} $INSTALL_DIR"
-    }
-    
-    # Main menu loop
-    while true; do
-        draw_menu
+        echo "------------------------------------------------------------------------------"
+        echo -e "Commands: ${GREEN}Enter${NC} to confirm, ${YELLOW}a${NC}ll to select all, ${YELLOW}n${NC}one to clear all"
+        echo -ne "Select option: "
         
-        # Read single character
-        read -rsn1 key
+        read choice
         
-        # Handle special keys
-        case "$key" in
-            $'\x1b') # Escape sequence
-                # Read next 2 chars with short timeout
-                read -rsn2 -t 0.1 next_chars
-                case "$next_chars" in
-                    '[A'|'OA') # Up arrow
-                        ((selected--))
-                        ;;
-                    '[B'|'OB') # Down arrow
-                        ((selected++))
-                        ;;
-                esac
-                ;;
-            'k'|'K') # Vim style Up
-                ((selected--))
-                ;;
-            'j'|'J') # Vim style Down
-                ((selected++))
-                ;;
-            ' ') # Space - toggle
-                IFS=':' read -r name desc status <<< "${features[$selected]}"
-                if [ "$status" = "true" ]; then
-                    features[$selected]="$name:$desc:false"
-                else
-                    features[$selected]="$name:$desc:true"
-                fi
-                ;;
-            '') # Enter - confirm
+        case "$choice" in
+            "") # Enter
                 break
                 ;;
+            [aA]*) # All
+                for i in "${!features[@]}"; do
+                    IFS=':' read -r n d s <<< "${features[$i]}"
+                    features[$i]="$n:$d:true"
+                done
+                ;;
+            [nN]*) # None
+                for i in "${!features[@]}"; do
+                    IFS=':' read -r n d s <<< "${features[$i]}"
+                    features[$i]="$n:$d:false"
+                done
+                ;;
+            *) # Number
+                if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#features[@]} ]; then
+                    local idx=$((choice - 1))
+                    IFS=':' read -r name desc status <<< "${features[$idx]}"
+                    if [ "$status" = "true" ]; then
+                        features[$idx]="$name:$desc:false"
+                    else
+                        features[$idx]="$name:$desc:true"
+                    fi
+                fi
+                ;;
         esac
-        
-        # Handle wrap around
-        if [ $selected -lt 0 ]; then
-            selected=$((total - 1))
-        elif [ $selected -ge $total ]; then
-            selected=0
-        fi
     done
     
     # Apply selections
