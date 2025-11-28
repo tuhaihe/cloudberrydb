@@ -265,53 +265,11 @@ select_features() {
     
     clear
 }
-    while true; do
-        clear
-        echo -e "${BLUE}=== Apache Cloudberry Build Configuration ===${NC}"
-        echo "Select features to enable/disable (Toggle with number, Enter to confirm):"
-        echo ""
-        
-        # Display Menu
-        local i=1
-        local keys=("ORCA" "PXF" "GSSAPI" "LDAP" "XML" "LZ4" "ZSTD" "PAM" "PERL" "PYTHON" "ICU" "SELINUX" "SECCOMP" "SYSTEMD" "UUID" "XSLT" "PAX" "GPFDIST" "MAPREDUCE" "IC_PROXY" "DEBUG")
-        
-        for key in "${keys[@]}"; do
-            # Get value using indirect reference
-            local var_name="FEATURE_$key"
-            local val="${!var_name}"
-            
-            if [ "$val" = true ]; then
-                echo -e "$i) [${GREEN}x${NC}] $key"
-            else
-                echo -e "$i) [ ] $key"
-            fi
-            ((i++))
-        done
-        
-        echo ""
-        echo "Installation Path: $INSTALL_DIR"
-        echo ""
-        read -p "Enter number to toggle, or Press Enter to continue: " choice
-        
-        if [ -z "$choice" ]; then
-            break
-        fi
-        
-        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#keys[@]} ]; then
-            local key="${keys[$((choice-1))]}"
-            local var_name="FEATURE_$key"
-            local val="${!var_name}"
-            
-            if [ "$val" = true ]; then
-                eval "$var_name=false"
-            else
-                eval "$var_name=true"
-            fi
-        fi
-    done
-    
-    info "Configuration confirmed."
-}
+
+# ----------------------------------------------------------------------
+# OS Detection
+# ----------------------------------------------------------------------
+
 
 # ----------------------------------------------------------------------
 # Step 1: Install Dependencies
