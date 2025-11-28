@@ -229,30 +229,44 @@ select_features() {
         # Read single character
         read -rsn1 key
         
-        # Handle arrow keys (they send 3 characters: ESC [ A/B)
-        if [ "$key" = $'\x1b' ]; then
-            read -rsn2 -t 0.1 key
-            case "$key" in
-                '[A') # Up arrow
-                    ((selected--))
-                    [ $selected -lt 0 ] && selected=$((total - 1))
-                    ;;
-                '[B') # Down arrow
-                    ((selected++))
-                    [ $selected -ge $total ] && selected=0
-                    ;;
-            esac
-        elif [ "$key" = " " ]; then
-            # Space - toggle current item
-            IFS=':' read -r name desc status <<< "${features[$selected]}"
-            if [ "$status" = "true" ]; then
-                features[$selected]="$name:$desc:false"
-            else
-                features[$selected]="$name:$desc:true"
-            fi
-        elif [ "$key" = "" ]; then
-            # Enter - confirm and exit
-            break
+        # Handle special keys
+        case "$key" in
+            $'\x1b') # Escape sequence
+                # Read next 2 chars with short timeout
+                read -rsn2 -t 0.1 next_chars
+                case "$next_chars" in
+                    '[A'|'OA') # Up arrow
+                        ((selected--))
+                        ;;
+                    '[B'|'OB') # Down arrow
+                        ((selected++))
+                        ;;
+                esac
+                ;;
+            'k'|'K') # Vim style Up
+                ((selected--))
+                ;;
+            'j'|'J') # Vim style Down
+                ((selected++))
+                ;;
+            ' ') # Space - toggle
+                IFS=':' read -r name desc status <<< "${features[$selected]}"
+                if [ "$status" = "true" ]; then
+                    features[$selected]="$name:$desc:false"
+                else
+                    features[$selected]="$name:$desc:true"
+                fi
+                ;;
+            '') # Enter - confirm
+                break
+                ;;
+        esac
+        
+        # Handle wrap around
+        if [ $selected -lt 0 ]; then
+            selected=$((total - 1))
+        elif [ $selected -ge $total ]; then
+            selected=0
         fi
     done
     
