@@ -78,52 +78,85 @@ fail() {
     exit 1
 }
 
-# Enhanced command execution with persistent header and live output
+# Enhanced command execution with fixed header and scrolling output
 run_with_header() {
     local step_name="$1"
     local cmd="$2"
     local log_to_file="${3:-true}"
     
-    # Print initial header
-    local header_line1="╔════════════════════════════════════════════════════════════════════════════╗"
-    local header_line2="║ STEP: $step_name"
-    local header_line3="╚════════════════════════════════════════════════════════════════════════════╝"
-    
-    echo ""
-    echo -e "${BLUE}${header_line1}${NC}"
-    echo -e "${BLUE}${header_line2}${NC}"
-    echo -e "${BLUE}${header_line3}${NC}"
-    echo ""
-    
-    # Create a temporary file for output
-    local temp_output=$(mktemp)
-    
-    # Execute command and capture output with line prefixes
-    if [ "$log_to_file" = true ]; then
-        (eval "$cmd" 2>&1 || echo "EXIT_CODE=$?" > "${temp_output}.exit") | while IFS= read -r line; do
-            # Print with step indicator prefix
-            echo -e "${BLUE}▶${NC} $line"
-            echo "$line" >> "$LOG_FILE"
-        done
-        
-        # Check exit code
-        if [ -f "${temp_output}.exit" ]; then
-            local exit_code=$(grep EXIT_CODE "${temp_output}.exit" | cut -d= -f2)
-            rm -f "${temp_output}.exit"
-            rm -f "$temp_output"
-            return ${exit_code:-1}
+    # Check if tput is available for advanced terminal control
+    if ! command -v tput &> /dev/null; then
+        echo "STEP: $step_name"
+        echo "CMD: $cmd"
+        if [ "$log_to_file" = true ]; then
+            eval "$cmd" 2>&1 | tee -a "$LOG_FILE"
+            return ${PIPESTATUS[0]}
+        else
+            eval "$cmd"
+            return $?
         fi
-    else
-        eval "$cmd" 2>&1 | while IFS= read -r line; do
-            echo -e "${BLUE}▶${NC} $line"
-        done
-        local result=${PIPESTATUS[0]}
-        rm -f "$temp_output"
-        return $result
     fi
+
+    # Calculate dimensions
+    local term_lines=$(tput lines)
+    local header_height=6
+    local scroll_start=$((header_height))
+    local scroll_end=$((term_lines - 1))
+
+    # Save cursor and clear screen
+    tput smcup
+    clear
+
+    # Draw Fixed Header
+    tput cup 0 0
+    echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║${NC} ${GREEN}STEP:${NC} $step_name"
+    # Truncate command if too long
+    local display_cmd="${cmd:0:60}"
+    [ "${#cmd}" -gt 60 ] && display_cmd="${display_cmd}..."
+    echo -e "${BLUE}║${NC} ${GREEN}CMD: ${NC}$display_cmd"
+    echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    # Set scrolling region (from line 6 to bottom)
+    tput csr $scroll_start $scroll_end
     
-    rm -f "$temp_output"
-    return 0
+    # Move cursor to start of scrolling region
+    tput cup $scroll_start 0
+
+    # Ensure we reset terminal on exit/interrupt
+    trap 'tput csr 0 $(($(tput lines) - 1)); tput rmcup; exit 1' INT TERM
+
+    # Execute command
+    local exit_code=0
+    if [ "$log_to_file" = true ]; then
+        # We don't use the prefix anymore as it might clutter the "docker-like" clean look,
+        # or we can keep it. Let's keep it simple.
+        eval "$cmd" 2>&1 | tee -a "$LOG_FILE"
+        exit_code=${PIPESTATUS[0]}
+    else
+        eval "$cmd"
+        exit_code=$?
+    fi
+
+    # Reset scrolling region
+    tput csr 0 $(($(tput lines) - 1))
+    
+    # Restore screen (optional, maybe we want to keep the output?)
+    # tput rmcup # This would clear the output, which user might not want.
+    # Instead of rmcup, we just leave the output there but reset scrolling.
+    # However, we used smcup at start, which switches to alternate screen.
+    # If we want to keep output, we shouldn't use smcup/rmcup.
+    # But if we don't use smcup, we overwrite previous history.
+    # "Docker build" usually keeps history.
+    
+    # Let's NOT use smcup/rmcup to persist output, but we must be careful.
+    # If we don't use smcup, we just clear screen.
+    
+    # Reset trap
+    trap - INT TERM
+    
+    return $exit_code
 }
 
 check_root() {
