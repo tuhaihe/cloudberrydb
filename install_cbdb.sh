@@ -603,14 +603,14 @@ install_dependencies() {
         [ "$FEATURE_DTRACE" = true ] && FEATURE_DEPS+=(systemtap-sdt-dev)
         [ "$FEATURE_TAP_TESTS" = true ] && FEATURE_DEPS+=(libipc-run-perl)
         
-        # PAX Dependencies (OS Specific)
-        if [ "$FEATURE_PAX" = true ]; then
-            FEATURE_DEPS+=(cmake libprotobuf-dev protobuf-compiler)
-        fi
+    # PAX Dependencies (OS Specific)
+    if [ "$FEATURE_PAX" = true ]; then
+        FEATURE_DEPS+=(cmake libprotobuf-dev protobuf-compiler)
+    fi
 
-        local all_deps=("${BASE_DEPS[@]}" "${FEATURE_DEPS[@]}")
-        run_with_header "Installing Dependencies (Ubuntu)" \
-            "apt-get install -y ${all_deps[*]}"
+    local all_deps=("${BASE_DEPS[@]}" "${FEATURE_DEPS[@]}")
+    run_with_header "Installing Dependencies (Ubuntu)" \
+        "apt-get install -y ${all_deps[*]}"
     else
         fail "Unsupported OS: $OS_ID"
     fi
