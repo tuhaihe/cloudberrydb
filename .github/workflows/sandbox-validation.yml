@@ -79,16 +79,30 @@ jobs:
       - name: Test single node deployment
         run: |
           cd devops/sandbox
-          ./run.sh -c ${{ matrix.version }}
+          # Use unique container name for each matrix version to avoid conflicts
+          CONTAINER_NAME="cbdb-cdw-$(echo ${{ matrix.version }} | tr '.' '-')"
+          
+          # Build the image first
+          ./run.sh -c ${{ matrix.version }} -b
+          
+          # Run with custom container name
+          docker run --interactive \
+                 --tty \
+                 --name $CONTAINER_NAME \
+                 --detach \
+                 --volume /sys/fs/cgroup:/sys/fs/cgroup:ro \
+                 --publish $(( 15432 + ${{ strategy.job-index }} )):5432 \
+                 --hostname cdw \
+                 cbdb-${{ matrix.version }}:rockylinux9
           
           # Stage 1: Wait for container to start
           echo "Stage 1: Waiting for container to start..."
-          timeout 120 bash -c 'until docker ps | grep -q cbdb-cdw; do sleep 2; echo "Waiting for container..."; done'
+          timeout 120 bash -c "until docker ps | grep -q $CONTAINER_NAME; do sleep 2; echo 'Waiting for container...'; done"
           echo "✓ Container started"
           
           # Stage 2: Wait for SSH service
           echo "Stage 2: Waiting for SSH service..."
-          timeout 120 bash -c 'until docker exec cbdb-cdw pgrep -f sshd > /dev/null 2>&1; do sleep 5; echo "Waiting for SSH..."; done'
+          timeout 120 bash -c "until docker exec $CONTAINER_NAME pgrep -f sshd > /dev/null 2>&1; do sleep 5; echo 'Waiting for SSH...'; done"
           echo "✓ SSH service ready"
           
           # Stage 3: Wait for database initialization with error detection
@@ -97,15 +111,15 @@ jobs:
           ELAPSED=0
           while [ $ELAPSED -lt $MAX_WAIT ]; do
               # Check for successful deployment
-              if docker logs cbdb-cdw 2>&1 | grep -q "DEPLOYMENT SUCCESSFUL"; then
+              if docker logs $CONTAINER_NAME 2>&1 | grep -q "DEPLOYMENT SUCCESSFUL"; then
                   echo "✓ Deployment completed successfully!"
                   break
               fi
               
               # Check for errors
-              if docker logs cbdb-cdw 2>&1 | grep -qE "ERROR|FATAL|failed to initialize"; then
+              if docker logs $CONTAINER_NAME 2>&1 | grep -qE "ERROR|FATAL|failed to initialize"; then
                   echo "❌ Deployment failed! Check logs below:"
-                  docker logs --tail 100 cbdb-cdw
+                  docker logs --tail 100 $CONTAINER_NAME
                   exit 1
               fi
               
@@ -118,20 +132,20 @@ jobs:
           
           if [ $ELAPSED -ge $MAX_WAIT ]; then
               echo "❌ Timeout waiting for deployment"
-              docker logs --tail 100 cbdb-cdw
+              docker logs --tail 100 $CONTAINER_NAME
               exit 1
           fi
           
           # Stage 4: Verify database connectivity
           echo "Stage 4: Verifying database connectivity..."
-          timeout 30 bash -c 'until docker exec -u gpadmin cbdb-cdw bash -l -c "psql -c \"SELECT 1\"" > /dev/null 2>&1; do sleep 2; echo "Waiting for database..."; done'
+          timeout 30 bash -c "until docker exec -u gpadmin $CONTAINER_NAME bash -l -c 'psql -c \"SELECT 1\"' > /dev/null 2>&1; do sleep 2; echo 'Waiting for database...'; done"
           echo "✓ Database is accessible"
           
           # Test basic database operations
           echo "Running database tests..."
-          docker exec -u gpadmin cbdb-cdw bash -l -c "psql -c 'SELECT version()'"
-          docker exec -u gpadmin cbdb-cdw bash -l -c "psql -c 'SELECT * from gp_segment_configuration'"
-          docker exec -u gpadmin cbdb-cdw bash -l -c "psql -c 'SELECT * FROM pg_available_extensions'"
+          docker exec -u gpadmin $CONTAINER_NAME bash -l -c "psql -c 'SELECT version()'"
+          docker exec -u gpadmin $CONTAINER_NAME bash -l -c "psql -c 'SELECT * from gp_segment_configuration'"
+          docker exec -u gpadmin $CONTAINER_NAME bash -l -c "psql -c 'SELECT * FROM pg_available_extensions'"
           
           echo "✅ Single node test (${{ matrix.version }}) completed successfully"
         timeout-minutes: 30
@@ -139,6 +153,8 @@ jobs:
       - name: Check container logs on failure
         if: failure()
         run: |
+          CONTAINER_NAME="cbdb-cdw-$(echo ${{ matrix.version }} | tr '.' '-')"
+          
           echo "=== Container Status ==="
           docker ps -a || true
           
@@ -146,24 +162,25 @@ jobs:
           docker system df || true
           
           echo "=== Container Logs (last 200 lines) ==="
-          docker logs --tail 200 cbdb-cdw || true
+          docker logs --tail 200 $CONTAINER_NAME || true
           
           echo "=== Container Processes ==="
-          docker exec cbdb-cdw ps auxf || true
+          docker exec $CONTAINER_NAME ps auxf || true
           
           echo "=== Container Resource Usage ==="
-          docker stats --no-stream cbdb-cdw || true
+          docker stats --no-stream $CONTAINER_NAME || true
           
           echo "=== Database Logs ==="
-          docker exec cbdb-cdw bash -c 'find /data0/database -name "*.log" -type f -exec echo "--- {} ---" \; -exec tail -50 {} \;' || true
+          docker exec $CONTAINER_NAME bash -c 'find /data0/database -name "*.log" -type f -exec echo "--- {} ---" \; -exec tail -50 {} \;' || true
           
           echo "=== Checking for Core Dumps ==="
-          docker exec cbdb-cdw find /data0 -name "core.*" -ls || true
+          docker exec $CONTAINER_NAME find /data0 -name "core.*" -ls || true
       
       - name: Cleanup
         if: always()
         run: |
-          docker rm -f cbdb-cdw || true
+          CONTAINER_NAME="cbdb-cdw-$(echo ${{ matrix.version }} | tr '.' '-')"
+          docker rm -f $CONTAINER_NAME || true
           docker system prune -af || true
 
   test-multi-node-build:
@@ -190,44 +207,59 @@ jobs:
       - name: Test multi-node deployment
         run: |
           cd devops/sandbox
-          ./run.sh -c ${{ matrix.version }} -m
+          # Use unique project name for each matrix version to avoid container name conflicts
+          PROJECT_NAME="cbdb-$(echo ${{ matrix.version }} | tr '.' '-')"
+          
+          # Build the image first
+          ./run.sh -c ${{ matrix.version }} -b
+          
+          # Export environment variables for docker compose
+          export CODEBASE_VERSION=${{ matrix.version }}
+          export OS_VERSION=rockylinux9
+          
+          # Run docker compose with unique project name
+          # This will prefix all container names with the project name
+          docker compose -p $PROJECT_NAME -f docker-compose-rockylinux9.yml up --detach
           
           # Stage 1: Verify all containers are running
           echo "Stage 1: Verifying all containers are running..."
           sleep 10  # Give docker compose time to start all containers
-          for container in cbdb-cdw cbdb-scdw cbdb-sdw1 cbdb-sdw2; do
-              if ! docker ps | grep -q $container; then
-                  echo "❌ Container $container is not running!"
+          for service in cbdb-coordinator cbdb-standby-coordinator cbdb-segment-host-1 cbdb-segment-host-2; do
+              CONTAINER="${PROJECT_NAME}-${service}-1"
+              if ! docker ps | grep -q $CONTAINER; then
+                  echo "❌ Container $CONTAINER is not running!"
                   docker ps -a
                   exit 1
               fi
-              echo "✓ Container $container is running"
+              echo "✓ Container $CONTAINER is running"
           done
           
           # Stage 2: Wait for SSH services on all nodes
           echo "Stage 2: Waiting for SSH services on all nodes..."
-          for container in cbdb-cdw cbdb-scdw cbdb-sdw1 cbdb-sdw2; do
-              echo "Checking SSH on $container..."
-              timeout 120 bash -c "until docker exec $container pgrep -f sshd > /dev/null 2>&1; do sleep 5; done"
-              echo "✓ SSH ready on $container"
+          for service in cbdb-coordinator cbdb-standby-coordinator cbdb-segment-host-1 cbdb-segment-host-2; do
+              CONTAINER="${PROJECT_NAME}-${service}-1"
+              echo "Checking SSH on $CONTAINER..."
+              timeout 120 bash -c "until docker exec $CONTAINER pgrep -f sshd > /dev/null 2>&1; do sleep 5; done"
+              echo "✓ SSH ready on $CONTAINER"
           done
           
           # Stage 3: Wait for database initialization with error detection (longer timeout for multi-node)
           echo "Stage 3: Waiting for multi-node database initialization..."
           MAX_WAIT=1200  # 20 minutes for multi-node
           ELAPSED=0
+          COORDINATOR="${PROJECT_NAME}-cbdb-coordinator-1"
           while [ $ELAPSED -lt $MAX_WAIT ]; do
               # Check for successful deployment
-              if docker logs cbdb-cdw 2>&1 | grep -q "DEPLOYMENT SUCCESSFUL"; then
+              if docker logs $COORDINATOR 2>&1 | grep -q "DEPLOYMENT SUCCESSFUL"; then
                   echo "✓ Multi-node deployment completed successfully!"
                   break
               fi
               
               # Check for errors in coordinator logs
-              if docker logs cbdb-cdw 2>&1 | grep -qE "ERROR|FATAL|failed to initialize|gpinitsystem.*failed"; then
+              if docker logs $COORDINATOR 2>&1 | grep -qE "ERROR|FATAL|failed to initialize|gpinitsystem.*failed"; then
                   echo "❌ Multi-node deployment failed! Check logs below:"
                   echo "=== Coordinator logs ==="
-                  docker logs --tail 100 cbdb-cdw
+                  docker logs --tail 100 $COORDINATOR
                   exit 1
               fi
               
@@ -240,20 +272,20 @@ jobs:
           
           if [ $ELAPSED -ge $MAX_WAIT ]; then
               echo "❌ Timeout waiting for multi-node deployment"
-              docker logs --tail 100 cbdb-cdw
+              docker logs --tail 100 $COORDINATOR
               exit 1
           fi
           
           # Stage 4: Verify database connectivity
           echo "Stage 4: Verifying database connectivity..."
-          timeout 30 bash -c 'until docker exec -u gpadmin cbdb-cdw bash -l -c "psql -c \"SELECT 1\"" > /dev/null 2>&1; do sleep 2; echo "Waiting for database..."; done'
+          timeout 30 bash -c "until docker exec -u gpadmin $COORDINATOR bash -l -c 'psql -c \"SELECT 1\"' > /dev/null 2>&1; do sleep 2; echo 'Waiting for database...'; done"
           echo "✓ Database is accessible"
           
           # Test basic database operations
           echo "Running database tests..."
-          docker exec -u gpadmin cbdb-cdw bash -l -c "psql -c 'SELECT version()'"
-          docker exec -u gpadmin cbdb-cdw bash -l -c "psql -c 'SELECT * from gp_segment_configuration'"
-          docker exec -u gpadmin cbdb-cdw bash -l -c "psql -c 'SELECT * FROM pg_available_extensions'"
+          docker exec -u gpadmin $COORDINATOR bash -l -c "psql -c 'SELECT version()'"
+          docker exec -u gpadmin $COORDINATOR bash -l -c "psql -c 'SELECT * from gp_segment_configuration'"
+          docker exec -u gpadmin $COORDINATOR bash -l -c "psql -c 'SELECT * FROM pg_available_extensions'"
           
           echo "✅ Multi-node test (${{ matrix.version }}) completed successfully"
         timeout-minutes: 45
@@ -261,6 +293,12 @@ jobs:
       - name: Check all container logs on failure
         if: failure()
         run: |
+          PROJECT_NAME="cbdb-$(echo ${{ matrix.version }} | tr '.' '-')"
+          COORDINATOR="${PROJECT_NAME}-cbdb-coordinator-1"
+          STANDBY="${PROJECT_NAME}-cbdb-standby-coordinator-1"
+          SEG1="${PROJECT_NAME}-cbdb-segment-host-1-1"
+          SEG2="${PROJECT_NAME}-cbdb-segment-host-2-1"
+          
           echo "=== All Container Status ==="
           docker ps -a || true
           
@@ -268,35 +306,36 @@ jobs:
           docker system df || true
           
           echo "=== Coordinator Logs (last 200 lines) ==="
-          docker logs --tail 200 cbdb-cdw || true
+          docker logs --tail 200 $COORDINATOR || true
           
           echo "=== Standby Coordinator Logs (last 100 lines) ==="
-          docker logs --tail 100 cbdb-scdw || true
+          docker logs --tail 100 $STANDBY || true
           
           echo "=== Segment 1 Logs (last 100 lines) ==="
-          docker logs --tail 100 cbdb-sdw1 || true
+          docker logs --tail 100 $SEG1 || true
           
           echo "=== Segment 2 Logs (last 100 lines) ==="
-          docker logs --tail 100 cbdb-sdw2 || true
+          docker logs --tail 100 $SEG2 || true
           
           echo "=== Coordinator Processes ==="
-          docker exec cbdb-cdw ps auxf || true
+          docker exec $COORDINATOR ps auxf || true
           
           echo "=== Database Logs on Coordinator ==="
-          docker exec cbdb-cdw bash -c 'find /data0/database -name "*.log" -type f -exec echo "--- {} ---" \; -exec tail -50 {} \;' || true
+          docker exec $COORDINATOR bash -c 'find /data0/database -name "*.log" -type f -exec echo "--- {} ---" \; -exec tail -50 {} \;' || true
           
           echo "=== Network Status ==="
           docker network ls || true
-          docker network inspect cbdb-interconnect || true
+          docker network inspect ${PROJECT_NAME}_interconnect || true
           
           echo "=== Checking for Core Dumps ==="
-          docker exec cbdb-cdw find /data0 -name "core.*" -ls || true
+          docker exec $COORDINATOR find /data0 -name "core.*" -ls || true
       
       - name: Cleanup
         if: always()
         run: |
           cd devops/sandbox
-          docker compose -f docker-compose-rockylinux9.yml down -v || true
+          PROJECT_NAME="cbdb-$(echo ${{ matrix.version }} | tr '.' '-')"
+          docker compose -p $PROJECT_NAME -f docker-compose-rockylinux9.yml down -v || true
           docker system prune -af || true
 
   notify-results:
