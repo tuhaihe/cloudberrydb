@@ -560,6 +560,22 @@ doNotifyingOnePhaseCommit(void)
 	Assert(MyTmGxactLocal->state == DTX_STATE_ONE_PHASE_COMMIT);
 	setCurrentDtxState(DTX_STATE_NOTIFYING_ONE_PHASE_COMMIT);
 
+	/*
+	 * Remove the gxid from the global transaction array BEFORE dispatching
+	 * COMMIT to QEs. This fixes the same race condition as described in
+	 * doNotifyingCommitPrepared(): without this, another transaction could
+	 * get a snapshot that includes this gxid as in-progress, but by the time
+	 * it queries the QE, the QE has already committed and written to
+	 * DistributedLog, causing incorrect visibility results.
+	 *
+	 * For one-phase commit, if the dispatch fails, we throw an ERROR and
+	 * the transaction will be aborted. The gxid is already removed, but
+	 * that's fine because the abort path will clean up properly.
+	 */
+	LWLockAcquire(ProcArrayLock, LW_EXCLUSIVE);
+	ProcArrayEndGxact(MyTmGxact);
+	LWLockRelease(ProcArrayLock);
+
 	succeeded = currentDtxDispatchProtocolCommand(DTX_PROTOCOL_COMMAND_COMMIT_ONEPHASE, true);
 	if (!succeeded)
 	{
@@ -595,6 +611,31 @@ doNotifyingCommitPrepared(void)
 	 * broadcasted.
 	 */
 	LWLockAcquire(TwophaseCommitLock, LW_SHARED);
+
+	/*
+	 * Remove the gxid from the global transaction array BEFORE dispatching
+	 * COMMIT PREPARED to QEs. This fixes a race condition where:
+	 *
+	 * 1. QD dispatches COMMIT PREPARED to QE
+	 * 2. QE commits, releases locks, writes to DistributedLog
+	 * 3. Another transaction T_new gets a snapshot, sees gxid still in
+	 *    allTmGxact (inProgressXidArray)
+	 * 4. QD removes gxid from allTmGxact
+	 * 5. T_new queries QE, incorrectly sees old tuple version as visible
+	 *    because gxid is in its inProgressXidArray but already committed
+	 *    in DistributedLog
+	 *
+	 * By removing gxid first, T_new's snapshot won't include this gxid,
+	 * and visibility checks will correctly see the committed data.
+	 *
+	 * This is safe because:
+	 * - The distributed commit XLOG record is already written
+	 * - The transaction is logically committed from recovery perspective
+	 * - QEs will definitely commit (or crash recovery will handle it)
+	 */
+	LWLockAcquire(ProcArrayLock, LW_EXCLUSIVE);
+	ProcArrayEndGxact(MyTmGxact);
+	LWLockRelease(ProcArrayLock);
 
 	savedInterruptHoldoffCount = InterruptHoldoffCount;
 
