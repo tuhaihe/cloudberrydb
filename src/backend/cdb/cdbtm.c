@@ -551,6 +551,7 @@ static void
 doNotifyingOnePhaseCommit(void)
 {
 	bool		succeeded;
+	char		gid[TMGIDSIZE];
 
 	if (MyTmGxactLocal->dtxSegments == NIL)
 		return;
@@ -561,12 +562,26 @@ doNotifyingOnePhaseCommit(void)
 	setCurrentDtxState(DTX_STATE_NOTIFYING_ONE_PHASE_COMMIT);
 
 	/*
+	 * Save the gid BEFORE removing gxid from the global transaction array,
+	 * because getDistributedTransactionId() depends on MyTmGxact->gxid.
+	 */
+	dtxFormGid(gid, getDistributedTransactionId());
+
+	/*
 	 * Remove the gxid from the global transaction array BEFORE dispatching
-	 * COMMIT to QEs. This fixes the same race condition as described in
-	 * doNotifyingCommitPrepared(): without this, another transaction could
-	 * get a snapshot that includes this gxid as in-progress, but by the time
-	 * it queries the QE, the QE has already committed and written to
-	 * DistributedLog, causing incorrect visibility results.
+	 * COMMIT to QEs. This fixes a race condition where:
+	 *
+	 * 1. QD dispatches COMMIT to QE
+	 * 2. QE commits, releases locks, writes to DistributedLog
+	 * 3. Another transaction T_new gets a snapshot, sees gxid still in
+	 *    allTmGxact (inProgressXidArray)
+	 * 4. QD removes gxid from allTmGxact
+	 * 5. T_new queries QE, incorrectly sees old tuple version as visible
+	 *    because gxid is in its inProgressXidArray but already committed
+	 *    in DistributedLog
+	 *
+	 * By removing gxid first, T_new's snapshot won't include this gxid,
+	 * and visibility checks will correctly see the committed data.
 	 *
 	 * For one-phase commit, if the dispatch fails, we throw an ERROR and
 	 * the transaction will be aborted. The gxid is already removed, but
@@ -576,7 +591,9 @@ doNotifyingOnePhaseCommit(void)
 	ProcArrayEndGxact(MyTmGxact);
 	LWLockRelease(ProcArrayLock);
 
-	succeeded = currentDtxDispatchProtocolCommand(DTX_PROTOCOL_COMMAND_COMMIT_ONEPHASE, true);
+	succeeded = doDispatchDtxProtocolCommand(DTX_PROTOCOL_COMMAND_COMMIT_ONEPHASE,
+											 gid, true,
+											 MyTmGxactLocal->dtxSegments, NULL, 0);
 	if (!succeeded)
 	{
 		/* If error is not thrown after failure then we have to throw it. */
@@ -597,6 +614,7 @@ doNotifyingCommitPrepared(void)
 	time_t		retry_time_start;
 	bool		retry_timedout;
 	XLogRecPtr 	recptr;
+	char		gid[TMGIDSIZE];
 
 	elog(DTM_DEBUG5, "doNotifyingCommitPrepared entering in state = %s", DtxStateToString(MyTmGxactLocal->state));
 
@@ -604,6 +622,12 @@ doNotifyingCommitPrepared(void)
 	setCurrentDtxState(DTX_STATE_NOTIFYING_COMMIT_PREPARED);
 
 	SIMPLE_FAULT_INJECTOR("dtm_broadcast_commit_prepared");
+
+	/*
+	 * Save the gid BEFORE removing gxid from the global transaction array,
+	 * because getDistributedTransactionId() depends on MyTmGxact->gxid.
+	 */
+	dtxFormGid(gid, getDistributedTransactionId());
 
 	/*
 	 * Acquire TwophaseCommitLock in shared mode to block any GPDB restore
@@ -642,7 +666,9 @@ doNotifyingCommitPrepared(void)
 	Assert(MyTmGxactLocal->dtxSegments != NIL);
 	PG_TRY();
 	{
-		succeeded = currentDtxDispatchProtocolCommand(DTX_PROTOCOL_COMMAND_COMMIT_PREPARED, true);
+		succeeded = doDispatchDtxProtocolCommand(DTX_PROTOCOL_COMMAND_COMMIT_PREPARED,
+												 gid, true,
+												 MyTmGxactLocal->dtxSegments, NULL, 0);
 	}
 	PG_CATCH();
 	{
@@ -697,7 +723,9 @@ doNotifyingCommitPrepared(void)
 		savedInterruptHoldoffCount = InterruptHoldoffCount;
 		PG_TRY();
 		{
-			succeeded = currentDtxDispatchProtocolCommand(DTX_PROTOCOL_COMMAND_RETRY_COMMIT_PREPARED, true);
+			succeeded = doDispatchDtxProtocolCommand(DTX_PROTOCOL_COMMAND_RETRY_COMMIT_PREPARED,
+													 gid, true,
+													 MyTmGxactLocal->dtxSegments, NULL, 0);
 		}
 		PG_CATCH();
 		{
