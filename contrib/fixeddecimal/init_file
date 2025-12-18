@@ -1,0 +1,7 @@
+
+-- start_matchignore
+m/^(?:HINT|NOTICE):\s+.+\'DISTRIBUTED BY\' clause.*/
+m/^ Optimizer: Postgres query optimizer/
+m/^ Optimizer: GPORCA/
+m/(fixeddecimal.c:\d+)/
+-- end_matchignore
