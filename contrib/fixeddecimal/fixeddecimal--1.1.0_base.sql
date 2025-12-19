@@ -15,7 +15,7 @@ RETURNS cstring
 AS 'fixeddecimal', 'fixeddecimalout'
 LANGUAGE C IMMUTABLE STRICT;
 
-CREATE FUNCTION fixeddecimalrecv(internal)
+CREATE FUNCTION fixeddecimalrecv(internal, oid, int4)
 RETURNS FIXEDDECIMAL
 AS 'fixeddecimal', 'fixeddecimalrecv'
 LANGUAGE C IMMUTABLE STRICT;
