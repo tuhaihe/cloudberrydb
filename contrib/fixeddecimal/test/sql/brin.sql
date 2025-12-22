@@ -1,5 +1,8 @@
 -- Test BRIN indexes
 SET enable_seqscan = off;
+-- start_ignore
+\i fixeddecimal--brin.sql
+-- end_ignore
 CREATE TABLE fixdec (d FIXEDDECIMAL, txt TEXT);
 INSERT INTO fixdec SELECT s.i,REPEAT('0',64) FROM generate_series(1,10000) s(i);
 

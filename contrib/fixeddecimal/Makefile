@@ -26,7 +26,8 @@ AGGFUNCSSQL := $(shell pg_config --version | grep -qE "XL" && echo fixeddecimal-
 
 AGGFUNCSSQL := $(shell pg_config --version | grep -qE "9\.[6-9]| 10\.[0-9]| 11\.[0-9]| 12\.[0-9]| 13\.[0-9]| 14\.[0-9]" && echo fixeddecimal--parallelaggs.sql || echo fixeddecimal--aggs.sql)
 
-BRINSQL := $(shell pg_config --version | grep -qE "9\.[5-9]| 10\.[0-9]| 11\.[0-9]| 12\.[0-9]| 13\.[0-9]| 14\.[0-9]" && echo fixeddecimal--brin.sql)
+# Keep BRIN support out of the main extension script; tests load it explicitly.
+#BRINSQL := $(shell pg_config --version | grep -qE "9\.[5-9]| 10\.[0-9]| 11\.[0-9]| 12\.[0-9]| 13\.[0-9]| 14\.[0-9]" && echo fixeddecimal--brin.sql)
 
 # 9.6 was the dawn of parallel query, so we'll use the parallel enabled .sql file from then on.
 BASESQL := $(shell pg_config --version | grep -qE "9\.[6-9]| 10\.[0-9]| 11\.[0-9]| 12\.[0-9]| 13\.[0-9]| 14\.[0-9]" && echo fixeddecimal--1.1.0_base_parallel.sql || echo fixeddecimal--1.1.0_base.sql)
@@ -36,3 +37,10 @@ OBJECTS := $(addprefix $(srcdir)/, $(AGGSTATESQL) $(BASESQL) $(AGGFUNCSSQL) $(BR
 fixeddecimal--1.1.0.sql: $(OBJECTS)
 	cat $^ > $@
 
+install-data: fixeddecimal--1.1.0.sql
+	@if [ -d '$(DESTDIR)$(datadir)/cdb_init.d' ]; then \
+		echo "install data"; \
+		$(INSTALL_DATA) $^ '$(DESTDIR)$(datadir)/cdb_init.d/'; \
+	fi
+
+install: install-data
