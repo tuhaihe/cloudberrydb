@@ -1,6 +1,3 @@
--- start_ignore
-\i fixeddecimal--opclass.sql
--- end_ignore
 CREATE TABLE fixdec (id INT, d FIXEDDECIMAL(5,2)) DISTRIBUTED BY (d);
 
 INSERT INTO fixdec (id,d) VALUES(1,-123.45);

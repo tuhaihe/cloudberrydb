@@ -15,6 +15,7 @@ REGRESS_BRIN += $(shell pg_config --version | grep -E "9\.[5-9]| 10\.0| 11\.[0-9
 REGRESS_VERSION_SPECIFIC := $(shell pg_config --version | grep -qE "XL" && echo index-xl || echo index)
 REGRESS = $(shell echo aggregate cast comparison overflow $(REGRESS_BRIN) $(REGRESS_VERSION_SPECIFIC))
 
+REGRESS = $(shell echo setup aggregate cast comparison overflow $(REGRESS_BRIN) $(REGRESS_VERSION_SPECIFIC))
 REGRESS_OPTS = --inputdir=test --outputdir=test --load-extension=fixeddecimal --init-file=init_file
 
 PG_CONFIG = pg_config
