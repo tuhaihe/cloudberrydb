@@ -1,0 +1,7 @@
+COPY public.sales_heap (product_id, is_audited, quantity, total_sales, unit_price, discount, description, sale_date, order_date, status, customer_name, price) FROM stdin;
+INSERT INTO sales_partition_heap SELECT * FROM sales_heap;
+INSERT 0 10000
+ANALYZE sales_heap;
+ANALYZE
+ANALYZE rootpartition sales_partition_heap;
+ANALYZE

@@ -35,7 +35,7 @@ run_tests()
     fi
 }
 
-##  Start up a Cloudberry binary using same $MASTER_DATA_DIRECTORY
+##  Start up a Cloudberry binary using same $COORDINATOR_DATA_DIRECTORY
 start_binary()
 {
     BINARY_PATH=$1
@@ -52,8 +52,8 @@ usage()
     echo "$appname usage:"
     echo " -b <dir>   Cloudberry install path for another binary to test upgrade/downgrade from (Required User Input)"
     echo " -c <dir>   Cloudberry install path for current binary to test upgrade/downgrade to (Default: \$GPHOME)"
-    echo " -m <dir>   Cloudberry Master Data Directory (Default: \$MASTER_DATA_DIRECTORY)"
-    echo " -p <port>  Cloudberry Master Port (Default: \$PGPORT)"
+    echo " -m <dir>   Cloudberry Coordinator Data Directory (Default: \$COORDINATOR_DATA_DIRECTORY)"
+    echo " -p <port>  Cloudberry Coordinator Port (Default: \$PGPORT)"
     echo " -v <variant> Variant of the test plan (Default: '')"
     exit 0
 }
@@ -67,7 +67,7 @@ while getopts ":c:b:m:p:v:" opt; do
             GPHOME_OTHER=$OPTARG
             ;;
         m)
-            MDD_CURRENT=$OPTARG
+            CDD_CURRENT=$OPTARG
             ;;
         p)
             PGPORT_CURRENT=$OPTARG
@@ -86,7 +86,7 @@ done
 
 ## Argument checking
 GPHOME_CURRENT=${GPHOME_CURRENT:=$GPHOME}
-MDD_CURRENT=${MDD_CURRENT:=$MASTER_DATA_DIRECTORY}
+CDD_CURRENT=${CDD_CURRENT:=$COORDINATOR_DATA_DIRECTORY}
 PGPORT_CURRENT=${PGPORT_CURRENT:=$PGPORT}
 
 if [ "${GPHOME_OTHER}x" == "x" ] || ! [ -f $GPHOME_OTHER/greenplum_path.sh ]; then
@@ -99,8 +99,8 @@ if [ "${GPHOME_CURRENT}x" == "x" ] || ! [ -f $GPHOME_CURRENT/greenplum_path.sh ]
     exit 1
 fi
 
-if [ "${MDD_CURRENT}x" == "x" ]; then
-    echo "Use -m to provide a valid Cloudberry Master Data Directory (Default: \$MASTER_DATA_DIRECTORY)"
+if [ "${CDD_CURRENT}x" == "x" ]; then
+    echo "Use -m to provide a valid Cloudberry Coordinator Data Directory (Default: \$COORDINATOR_DATA_DIRECTORY)"
     exit 1
 fi
 
@@ -131,6 +131,8 @@ echo "=================================================="
 
 ## Clean our directory of any previous test output
 clean_output
+
+run_tests schedule0${VARIANT}
 
 ## Start/restart current Cloudberry and do initial dump to compare against
 start_binary $GPHOME_CURRENT

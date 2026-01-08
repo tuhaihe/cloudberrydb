@@ -1,0 +1,48 @@
+DROP TABLE IF EXISTS sales_heap;
+CREATE TABLE IF NOT EXISTS sales_heap
+(
+    product_id INT,
+    is_audited BOOLEAN DEFAULT FALSE,
+    quantity SMALLINT,
+    total_sales BIGINT,
+    unit_price REAL,
+    discount DOUBLE PRECISION,
+    description TEXT,
+    sale_date TIMESTAMP,
+    order_date DATE,
+    status CHAR(10),
+    customer_name VARCHAR(20),
+    price DECIMAL(20, 10)
+) DISTRIBUTED BY (product_id);
+
+---
+
+DROP TABLE IF EXISTS sales_partition_heap;
+CREATE TABLE IF NOT EXISTS sales_partition_heap
+(   
+    product_id INT,
+    is_audited BOOLEAN DEFAULT FALSE,
+    quantity SMALLINT,
+    total_sales BIGINT,
+    unit_price REAL,
+    discount DOUBLE PRECISION,
+    description TEXT,
+    sale_date TIMESTAMP,
+    order_date DATE,
+    status CHAR(10),
+    customer_name VARCHAR(20),
+    price DECIMAL(20, 10)
+) DISTRIBUTED BY (product_id)
+PARTITION BY LIST (status);
+
+CREATE TABLE sales_partition_heap_part1
+PARTITION OF sales_partition_heap
+FOR VALUES IN ('Cancelled');
+
+CREATE TABLE sales_partition_heap_part2
+PARTITION OF sales_partition_heap
+FOR VALUES IN ('Closed');
+
+CREATE TABLE sales_partition_heap_part3
+PARTITION OF sales_partition_heap
+FOR VALUES IN ('Processing');

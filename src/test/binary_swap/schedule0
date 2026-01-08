@@ -1,0 +1,8 @@
+test: upgrading_compatibility/systables
+test: upgrading_compatibility/create_table
+test: upgrading_compatibility/load_data
+test: upgrading_compatibility/query_heap
+test: upgrading_compatibility/query_partition_heap
+test: upgrading_compatibility/insert
+test: upgrading_compatibility/update
+test: upgrading_compatibility/delete
