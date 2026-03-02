@@ -120,6 +120,10 @@ add_auxrelid_to_relation_entry(DiskQuotaRelationCacheEntry *entry, Oid relid)
 {
 	int i;
 
+	/* Boundary check to prevent array overflow */
+	if (entry->auxrel_num >= lengthof(entry->auxrel_oid))
+		return;
+
 	for (i = 0; i < entry->auxrel_num; i++)
 	{
 		if (entry->auxrel_oid[i] == relid)
@@ -143,13 +147,14 @@ update_relation_entry(Oid relid, DiskQuotaRelationCacheEntry *relation_entry, Di
 
 	if (relation_entry)
 	{
-		relation_entry->relid         = relid;
-		relation_entry->rnode.node    = rel->rd_node;
-		relation_entry->rnode.backend = rel->rd_backend;
-		relation_entry->owneroid      = rel->rd_rel->relowner;
-		relation_entry->namespaceoid  = rel->rd_rel->relnamespace;
-		relation_entry->relstorage    = DiskquotaGetRelstorage(rel->rd_rel);
-		relation_entry->relam         = rel->rd_rel->relam;
+		relation_entry->relid               = relid;
+		relation_entry->rnode.node          = rel->rd_node;
+		relation_entry->rnode.backend       = rel->rd_backend;
+		relation_entry->owneroid            = rel->rd_rel->relowner;
+		relation_entry->namespaceoid        = rel->rd_rel->relnamespace;
+		relation_entry->relstorage          = DiskquotaGetRelstorage(rel->rd_rel);
+		relation_entry->relam               = rel->rd_rel->relam;
+		relation_entry->primary_table_relid = relid;
 	}
 
 	if (relid_entry)
@@ -157,8 +162,6 @@ update_relation_entry(Oid relid, DiskQuotaRelationCacheEntry *relation_entry, Di
 		relid_entry->relfilenode = rel->rd_node.relNode;
 		relid_entry->relid       = relid;
 	}
-
-	relation_entry->primary_table_relid = relid;
 
 	RelationClose(rel);
 }

@@ -1965,10 +1965,7 @@ init_bgworker_handles(void)
 static BackgroundWorkerHandle *
 get_bgworker_handle(uint32 worker_id)
 {
-	if (worker_id >= 0)
-		return bgworker_handles[worker_id];
-	else
-		return NULL;
+	return bgworker_handles[worker_id];
 }
 
 static void
