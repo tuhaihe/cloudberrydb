@@ -1,99 +1,34 @@
-\i fixeddecimal--brin.sql
-CREATE OPERATOR CLASS fixeddecimal_minmax_ops
-DEFAULT FOR TYPE FIXEDDECIMAL USING brin AS
-    OPERATOR    1   <  (FIXEDDECIMAL, FIXEDDECIMAL),
-    OPERATOR    2   <= (FIXEDDECIMAL, FIXEDDECIMAL),
-    OPERATOR    3   =  (FIXEDDECIMAL, FIXEDDECIMAL),
-    OPERATOR    4   >= (FIXEDDECIMAL, FIXEDDECIMAL),
-    OPERATOR    5   >  (FIXEDDECIMAL, FIXEDDECIMAL),
-    FUNCTION    1   brin_minmax_opcinfo(INTERNAL),
-    FUNCTION    2   brin_minmax_add_value(INTERNAL, INTERNAL, INTERNAL, INTERNAL),
-    FUNCTION    3   brin_minmax_consistent(INTERNAL, INTERNAL, INTERNAL),
-    FUNCTION    4   brin_minmax_union(INTERNAL, INTERNAL, INTERNAL);
-\i fixeddecimal--opclass.sql
--- opclass for btree index
-CREATE OPERATOR CLASS fixeddecimal_ops
-DEFAULT FOR TYPE FIXEDDECIMAL USING btree AS
-    OPERATOR    1   <  (FIXEDDECIMAL, FIXEDDECIMAL),
-    OPERATOR    2   <= (FIXEDDECIMAL, FIXEDDECIMAL),
-    OPERATOR    3   =  (FIXEDDECIMAL, FIXEDDECIMAL),
-    OPERATOR    4   >= (FIXEDDECIMAL, FIXEDDECIMAL),
-    OPERATOR    5   >  (FIXEDDECIMAL, FIXEDDECIMAL),
-    FUNCTION    1   fixeddecimal_cmp(FIXEDDECIMAL, FIXEDDECIMAL);
-CREATE OPERATOR CLASS fixeddecimal_numeric_ops
-FOR TYPE FIXEDDECIMAL USING btree AS
-    OPERATOR    1   <  (FIXEDDECIMAL, NUMERIC),
-    OPERATOR    2   <= (FIXEDDECIMAL, NUMERIC),
-    OPERATOR    3   =  (FIXEDDECIMAL, NUMERIC),
-    OPERATOR    4   >= (FIXEDDECIMAL, NUMERIC),
-    OPERATOR    5   >  (FIXEDDECIMAL, NUMERIC),
-    FUNCTION    1   fixeddecimal_numeric_cmp(FIXEDDECIMAL, NUMERIC);
-CREATE OPERATOR CLASS numeric_fixeddecimal_ops
-FOR TYPE FIXEDDECIMAL USING btree AS
-    OPERATOR    1   <  (NUMERIC, FIXEDDECIMAL) FOR SEARCH,
-    OPERATOR    2   <= (NUMERIC, FIXEDDECIMAL) FOR SEARCH,
-    OPERATOR    3   =  (NUMERIC, FIXEDDECIMAL) FOR SEARCH,
-    OPERATOR    4   >= (NUMERIC, FIXEDDECIMAL) FOR SEARCH,
-    OPERATOR    5   >  (NUMERIC, FIXEDDECIMAL) FOR SEARCH,
-    FUNCTION    1   numeric_fixeddecimal_cmp(NUMERIC, FIXEDDECIMAL);
-CREATE OPERATOR CLASS fixeddecimal_int4_ops
-FOR TYPE FIXEDDECIMAL USING btree AS
-    OPERATOR    1   <  (FIXEDDECIMAL, INT4),
-    OPERATOR    2   <= (FIXEDDECIMAL, INT4),
-    OPERATOR    3   =  (FIXEDDECIMAL, INT4),
-    OPERATOR    4   >= (FIXEDDECIMAL, INT4),
-    OPERATOR    5   >  (FIXEDDECIMAL, INT4),
-    FUNCTION    1   fixeddecimal_int4_cmp(FIXEDDECIMAL, INT4);
-CREATE OPERATOR CLASS int4_fixeddecimal_ops
-FOR TYPE FIXEDDECIMAL USING btree AS
-    OPERATOR    1   <  (INT4, FIXEDDECIMAL),
-    OPERATOR    2   <= (INT4, FIXEDDECIMAL),
-    OPERATOR    3   =  (INT4, FIXEDDECIMAL),
-    OPERATOR    4   >= (INT4, FIXEDDECIMAL),
-    OPERATOR    5   >  (INT4, FIXEDDECIMAL),
-    FUNCTION    1   int4_fixeddecimal_cmp(INT4, FIXEDDECIMAL);
-CREATE OPERATOR CLASS fixeddecimal_int2_ops
-FOR TYPE FIXEDDECIMAL USING btree AS
-    OPERATOR    1   <  (FIXEDDECIMAL, INT2),
-    OPERATOR    2   <= (FIXEDDECIMAL, INT2),
-    OPERATOR    3   =  (FIXEDDECIMAL, INT2),
-    OPERATOR    4   >= (FIXEDDECIMAL, INT2),
-    OPERATOR    5   >  (FIXEDDECIMAL, INT2),
-    FUNCTION    1   fixeddecimal_int2_cmp(FIXEDDECIMAL, INT2);
-CREATE OPERATOR CLASS int2_fixeddecimal_ops
-FOR TYPE FIXEDDECIMAL USING btree AS
-    OPERATOR    1   <  (INT2, FIXEDDECIMAL),
-    OPERATOR    2   <= (INT2, FIXEDDECIMAL),
-    OPERATOR    3   =  (INT2, FIXEDDECIMAL),
-    OPERATOR    4   >= (INT2, FIXEDDECIMAL),
-    OPERATOR    5   >  (INT2, FIXEDDECIMAL),
-    FUNCTION    1   int2_fixeddecimal_cmp(INT2, FIXEDDECIMAL);
--- opclass for hash index
-CREATE OPERATOR CLASS fixeddecimal_ops
-DEFAULT FOR TYPE FIXEDDECIMAL USING hash AS
-    OPERATOR    1   =  (FIXEDDECIMAL, FIXEDDECIMAL),
-    FUNCTION    1   fixeddecimal_hash(FIXEDDECIMAL);
-CREATE OPERATOR CLASS fixeddecimal_numeric_ops
-FOR TYPE FIXEDDECIMAL USING hash AS
-    OPERATOR    1   =  (FIXEDDECIMAL, NUMERIC),
-    FUNCTION    1   fixeddecimal_hash(FIXEDDECIMAL);
-CREATE OPERATOR CLASS numeric_fixeddecimal_ops
-FOR TYPE FIXEDDECIMAL USING hash AS
-    OPERATOR    1   =  (NUMERIC, FIXEDDECIMAL),
-    FUNCTION    1   fixeddecimal_hash(FIXEDDECIMAL);
-CREATE OPERATOR CLASS fixeddecimal_int4_ops
-FOR TYPE FIXEDDECIMAL USING hash AS
-    OPERATOR    1   =  (FIXEDDECIMAL, INT4),
-    FUNCTION    1   fixeddecimal_hash(FIXEDDECIMAL);
-CREATE OPERATOR CLASS int4_fixeddecimal_ops
-FOR TYPE FIXEDDECIMAL USING hash AS
-    OPERATOR    1   =  (INT4, FIXEDDECIMAL),
-    FUNCTION    1   fixeddecimal_hash(FIXEDDECIMAL);
-CREATE OPERATOR CLASS fixeddecimal_int2_ops
-FOR TYPE FIXEDDECIMAL USING hash AS
-    OPERATOR    1   =  (FIXEDDECIMAL, INT2),
-    FUNCTION    1   fixeddecimal_hash(FIXEDDECIMAL);
-CREATE OPERATOR CLASS int2_fixeddecimal_ops
-FOR TYPE FIXEDDECIMAL USING hash AS
-    OPERATOR    1   =  (INT2, FIXEDDECIMAL),
-    FUNCTION    1   fixeddecimal_hash(FIXEDDECIMAL);
+SELECT am.amname, opc.opcname
+FROM pg_opclass opc
+JOIN pg_am am ON am.oid = opc.opcmethod
+JOIN pg_namespace nsp ON nsp.oid = opc.opcnamespace
+WHERE nsp.nspname = current_schema()
+  AND opc.opcname IN (
+    'fixeddecimal_minmax_ops',
+    'fixeddecimal_ops',
+    'fixeddecimal_numeric_ops',
+    'numeric_fixeddecimal_ops',
+    'fixeddecimal_int4_ops',
+    'int4_fixeddecimal_ops',
+    'fixeddecimal_int2_ops',
+    'int2_fixeddecimal_ops'
+  )
+ORDER BY am.amname, opc.opcname;
+ amname |         opcname         
+--------+-------------------------
+ brin   | fixeddecimal_minmax_ops
+ btree  | fixeddecimal_int2_ops
+ btree  | fixeddecimal_int4_ops
+ btree  | fixeddecimal_numeric_ops
+ btree  | fixeddecimal_ops
+ btree  | int2_fixeddecimal_ops
+ btree  | int4_fixeddecimal_ops
+ btree  | numeric_fixeddecimal_ops
+ hash   | fixeddecimal_int2_ops
+ hash   | fixeddecimal_int4_ops
+ hash   | fixeddecimal_numeric_ops
+ hash   | fixeddecimal_ops
+ hash   | int2_fixeddecimal_ops
+ hash   | int4_fixeddecimal_ops
+ hash   | numeric_fixeddecimal_ops
+(15 rows)

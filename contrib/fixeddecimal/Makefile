@@ -18,14 +18,16 @@ REGRESS_BRIN := brin
 REGRESS_VERSION_SPECIFIC := index
 AGGSTATESQL :=
 AGGFUNCSSQL := fixeddecimal--parallelaggs.sql
-BRINSQL :=
+OPCLASSSQL := fixeddecimal--opclass.sql
+BRINSQL := $(shell $(PG_CONFIG) --version | grep -qE "9\.[5-9]| 10\.[0-9]| 11\.[0-9]| 12\.[0-9]| 13\.[0-9]| 14\.[0-9]" && echo fixeddecimal--brin.sql)
 BASESQL := fixeddecimal--1.1.0_base_parallel.sql
 else
 REGRESS_BRIN := brin-xl
 REGRESS_VERSION_SPECIFIC := index-xl
 AGGSTATESQL := fixeddecimalaggstate.sql
 AGGFUNCSSQL := fixeddecimal--xlaggs.sql
-BRINSQL :=
+OPCLASSSQL := fixeddecimal--opclass.sql
+BRINSQL := $(shell $(PG_CONFIG) --version | grep -qE "9\.[5-9]| 10\.[0-9]| 11\.[0-9]| 12\.[0-9]| 13\.[0-9]| 14\.[0-9]" && echo fixeddecimal--brin.sql)
 BASESQL := fixeddecimal--1.1.0_base.sql
 endif
 else
@@ -37,7 +39,8 @@ REGRESS_BRIN := brin
 REGRESS_VERSION_SPECIFIC := index
 AGGSTATESQL :=
 AGGFUNCSSQL := fixeddecimal--parallelaggs.sql
-BRINSQL :=
+OPCLASSSQL := fixeddecimal--opclass.sql
+BRINSQL := fixeddecimal--brin.sql
 BASESQL := fixeddecimal--1.1.0_base_parallel.sql
 endif
 
@@ -49,7 +52,7 @@ else
 FD_SRC_PREFIX := $(srcdir)/
 endif
 
-OBJECTS := $(addprefix $(FD_SRC_PREFIX), $(AGGSTATESQL) $(BASESQL) $(AGGFUNCSSQL) $(BRINSQL))
+OBJECTS := $(addprefix $(FD_SRC_PREFIX), $(AGGSTATESQL) $(BASESQL) $(AGGFUNCSSQL) $(OPCLASSSQL) $(BRINSQL))
 
 fixeddecimal--1.1.0.sql: $(OBJECTS)
 	cat $^ > $@
