@@ -25,9 +25,9 @@ SELECT MIN(a) FROM fixed_decimal;
 (1 row)
 
 SELECT AVG(a) FROM fixed_decimal;
-         avg         
----------------------
- 22.2200000000000000
+  avg  
+-------
+ 22.22
 (1 row)
 
 DROP TABLE fixed_decimal;

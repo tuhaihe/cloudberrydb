@@ -15,7 +15,7 @@ WHERE nsp.nspname = current_schema()
   )
 ORDER BY am.amname, opc.opcname;
  amname |         opcname         
---------+-------------------------
+--------+--------------------------
  brin   | fixeddecimal_minmax_ops
  btree  | fixeddecimal_int2_ops
  btree  | fixeddecimal_int4_ops
