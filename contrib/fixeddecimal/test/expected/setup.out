@@ -14,7 +14,7 @@ WHERE nsp.nspname = current_schema()
     'int2_fixeddecimal_ops'
   )
 ORDER BY am.amname, opc.opcname;
- amname |         opcname         
+ amname |         opcname
 --------+--------------------------
  brin   | fixeddecimal_minmax_ops
  btree  | fixeddecimal_int2_ops
