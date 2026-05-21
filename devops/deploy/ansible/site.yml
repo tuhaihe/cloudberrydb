@@ -165,9 +165,10 @@
       loop:
         - { key: "vm.dirty_background_ratio", value: "3" }
         - { key: "vm.dirty_ratio", value: "10" }
-        - { key: "vm.dirty_background_bytes", value: "0" }
-        - { key: "vm.dirty_bytes", value: "0" }
       when: _ram_mb | int <= 65536
+      # Per official docs: for systems with 64GB RAM or less, only set the ratio
+      # parameters. vm.dirty_background_bytes and vm.dirty_bytes should be omitted
+      # entirely, not set to 0.
 
     - name: Create core dump directory
       file:
