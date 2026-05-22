@@ -23,6 +23,14 @@
 ---
 # --- Install build dependencies ---
 
+- name: Install EPEL repository (RHEL/Rocky Linux 8)
+  dnf:
+    name: epel-release
+    state: present
+  when:
+    - ansible_os_family == "RedHat"
+    - ansible_distribution_major_version == "8"
+
 - name: Install build dependencies (RHEL/Rocky Linux 8)
   dnf:
     name:
@@ -58,6 +66,7 @@
       - python3-pip
       - readline-devel
       - rsync
+      - the_silver_searcher
       - wget
       - which
       - zlib-devel
@@ -79,6 +88,14 @@
   when:
     - ansible_os_family == "RedHat"
     - ansible_distribution_major_version == "8"
+
+- name: Install EPEL repository (RHEL/Rocky Linux 9+)
+  dnf:
+    name: epel-release
+    state: present
+  when:
+    - ansible_os_family == "RedHat"
+    - ansible_distribution_major_version | int >= 9
 
 - name: Install build dependencies (RHEL/Rocky Linux 9+)
   dnf:
@@ -115,6 +132,7 @@
       - python3-pip
       - readline-devel
       - rsync
+      - the_silver_searcher
       - wget
       - which
       - zlib-devel
