@@ -23,8 +23,8 @@ This directory contains Ansible playbooks for deploying Apache Cloudberry on phy
 virtual machines. Two installation methods are supported:
 
 - **RPM/DEB package** (`site.yml`) — installs from a pre-built binary package
-- **Source build** (`site-from-source.yml`) — downloads the official source tarball,
-  verifies signatures, and compiles from source
+- **Source build** (`site-from-source.yml`) — compiles and installs from a source tarball
+  you provide
 
 ## Quick Start
 
@@ -47,15 +47,52 @@ ansible-playbook site.yml -i inventory/hosts \
 vi inventory/hosts
 vi group_vars/all.yml
 
-# 2. Run the playbook (no package_path needed)
+# 2. Run the playbook
 ansible-playbook site-from-source.yml -i inventory/hosts \
-    -e source_path=/path/to/apache-cloudberry-2.1.0-incubating-src.tar.gz
+    -e source_path=/path/to/apache-cloudberry-2.1.0-incubating-src.tar.gz \
+    -e xerces_path=/path/to/xerces-c-3.3.0.tar.gz   # RHEL/Rocky only
 ```
 
-Download and verify the source tarball from
-[Apache Cloudberry Releases](https://cloudberry.apache.org/releases) before running.
-The playbook handles build dependency installation, Xerces-C compilation (RHEL/Rocky only),
-and source compilation on each host.
+Download and verify the following before running:
+- Cloudberry source: [Apache Cloudberry Releases](https://cloudberry.apache.org/releases)
+- Xerces-C source (RHEL/Rocky only): [Apache Xerces-C Downloads](https://xerces.apache.org/xerces-c/download.cgi)
+
+Ubuntu uses the system `libxerces-c-dev` package, so `xerces_path` is not needed on Ubuntu.
+
+#### Downloading Cloudberry source
+
+Download the source tarball and verify its integrity:
+
+```bash
+# Download source tarball
+curl -L -o apache-cloudberry-2.1.0-incubating-src.tar.gz \
+  "https://www.apache.org/dyn/closer.lua/incubator/cloudberry/2.1.0-incubating/apache-cloudberry-2.1.0-incubating-src.tar.gz?action=download"
+
+# Download checksum and signature files
+curl -O https://downloads.apache.org/incubator/cloudberry/2.1.0-incubating/apache-cloudberry-2.1.0-incubating-src.tar.gz.sha512
+curl -O https://downloads.apache.org/incubator/cloudberry/2.1.0-incubating/apache-cloudberry-2.1.0-incubating-src.tar.gz.asc
+
+# Verify SHA512 checksum
+sha512sum -c apache-cloudberry-2.1.0-incubating-src.tar.gz.sha512
+
+# Verify GPG signature (optional but recommended)
+curl https://downloads.apache.org/incubator/cloudberry/KEYS | gpg --import
+gpg --verify apache-cloudberry-2.1.0-incubating-src.tar.gz.asc \
+             apache-cloudberry-2.1.0-incubating-src.tar.gz
+```
+
+#### Downloading Xerces-C (RHEL/Rocky Linux only)
+
+The playbook requires Xerces-C 3.3.0. Download and verify:
+
+```bash
+# Download source tarball
+wget https://dlcdn.apache.org/xerces/c/3/sources/xerces-c-3.3.0.tar.gz
+
+# Verify SHA256 checksum
+echo "$(curl -sL https://dlcdn.apache.org/xerces/c/3/sources/xerces-c-3.3.0.tar.gz.sha256)" \
+  | sha256sum -c -
+```
 
 ## Cluster Layout (default)
 
@@ -152,7 +189,7 @@ and cluster initialization steps. Only the installation role differs.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `cloudberry_version` | `2.1.0` | Version used for source download URL |
+| `cloudberry_version` | `2.1.0` | Cloudberry version (informational) |
 | `cloudberry_admin_user` | `gpadmin` | Admin OS user |
 | `cloudberry_admin_password` | `changeme` | Password for gpadmin |
 | `data_disk` | `/dev/sdb` | Data disk device (run `lsblk` to verify) |
@@ -160,7 +197,7 @@ and cluster initialization steps. Only the installation role differs.
 | `segments_per_host` | `2` | Primary segment instances per host |
 | `coordinator_port` | `5432` | Coordinator port |
 | `database_name` | `warehouse` | Default database created at init |
-| `xerces_version` | `3.3.0` | Xerces-C version (source build only) |
+| `xerces_version` | `3.3.0` | Xerces-C version (source build, RHEL/Rocky only) |
 
 ## After Deployment
 

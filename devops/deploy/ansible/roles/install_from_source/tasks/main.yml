@@ -184,6 +184,8 @@
 
 # --- Install Apache Xerces-C (RHEL/Rocky Linux only) ---
 # Ubuntu uses the system libxerces-c-dev package installed above.
+# Download the Xerces-C source tarball from https://xerces.apache.org/xerces-c/download.cgi
+# and pass the local path via: -e xerces_path=/path/to/xerces-c-3.3.0.tar.gz
 
 - name: Check if Xerces-C is already installed (RHEL/Rocky Linux)
   stat:
@@ -191,45 +193,26 @@
   register: xerces_installed
   when: ansible_os_family == "RedHat"
 
-- name: Download Xerces-C source (RHEL/Rocky Linux)
-  get_url:
-    url: "https://dlcdn.apache.org//xerces/c/3/sources/xerces-c-{{ xerces_version }}.tar.gz"
-    dest: "/tmp/xerces-c-{{ xerces_version }}.tar.gz"
+- name: Copy Xerces-C source tarball to host (RHEL/Rocky Linux)
+  copy:
+    src: "{{ xerces_path }}"
+    dest: "/tmp/{{ xerces_path | basename }}"
     mode: "0644"
   when:
     - ansible_os_family == "RedHat"
     - not xerces_installed.stat.exists
-
-- name: Download Xerces-C SHA256 checksum (RHEL/Rocky Linux)
-  get_url:
-    url: "https://dlcdn.apache.org//xerces/c/3/sources/xerces-c-{{ xerces_version }}.tar.gz.sha256"
-    dest: "/tmp/xerces-c-{{ xerces_version }}.tar.gz.sha256"
-    mode: "0644"
-  when:
-    - ansible_os_family == "RedHat"
-    - not xerces_installed.stat.exists
-
-- name: Verify Xerces-C checksum (RHEL/Rocky Linux)
-  shell: |
-    cd /tmp
-    sha256sum -c xerces-c-{{ xerces_version }}.tar.gz.sha256
-  args:
-    executable: /bin/bash
-  when:
-    - ansible_os_family == "RedHat"
-    - not xerces_installed.stat.exists
-  changed_when: false
 
 - name: Build and install Xerces-C (RHEL/Rocky Linux)
   shell: |
     cd /tmp
-    tar xf xerces-c-{{ xerces_version }}.tar.gz
-    cd xerces-c-{{ xerces_version }}
+    tar xf {{ xerces_path | basename }}
+    extracted=$(tar -tzf {{ xerces_path | basename }} | head -1 | cut -d/ -f1)
+    cd ${extracted}
     ./configure --prefix=/usr/local/xerces-c-{{ xerces_version }}
     make -j$(nproc)
     sudo make install
     sudo ln -sf /usr/local/xerces-c-{{ xerces_version }} /usr/local/xerces-c
-    cd /tmp && rm -rf xerces-c-{{ xerces_version }} xerces-c-{{ xerces_version }}.tar.gz
+    cd /tmp && rm -rf ${extracted} {{ xerces_path | basename }}
   args:
     executable: /bin/bash
   when:

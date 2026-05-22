@@ -28,6 +28,8 @@ cloudberry_version: "2.1.0"
 
 # Apache Xerces-C version (required for source build on RHEL/Rocky Linux)
 # Ubuntu uses the system libxerces-c-dev package instead.
+# Download from https://xerces.apache.org/xerces-c/download.cgi and pass via:
+#   -e xerces_path=/path/to/xerces-c-3.3.0.tar.gz
 xerces_version: "3.3.0"
 
 # Admin user
