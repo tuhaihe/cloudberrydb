@@ -75,6 +75,25 @@
   args:
     executable: /bin/bash
 
+- name: Wait for cluster to be fully ready
+  shell: |
+    source /usr/local/cloudberry-db/cloudberry-env.sh
+    source /home/{{ cloudberry_admin_user }}/.bashrc
+    for i in $(seq 1 12); do
+      if gpstate -s 2>&1 | grep -q "All segments are running normally"; then
+        echo "Cluster is ready"
+        exit 0
+      fi
+      echo "Waiting for cluster... attempt $i/12"
+      sleep 10
+    done
+    echo "Cluster ready check timed out, proceeding anyway"
+    exit 0
+  args:
+    executable: /bin/bash
+  changed_when: false
+  when: not pgversion_stat.stat.exists
+
 - name: Verify standby coordinator is synchronized
   shell: |
     source /usr/local/cloudberry-db/cloudberry-env.sh
@@ -99,6 +118,7 @@
     executable: /bin/bash
   register: gpinitstandby_result
   changed_when: "'skipping' not in gpinitstandby_result.stdout"
+  when: not pgversion_stat.stat.exists
 
 - name: Display success message
   debug:

@@ -294,15 +294,43 @@
     executable: /bin/bash
   become_user: "{{ cloudberry_admin_user }}"
 
-- name: Build and install Cloudberry
-  shell: |
-    export SRC_DIR=/home/{{ cloudberry_admin_user }}/cloudberry
-    export BUILD_DESTINATION=/usr/local/cloudberry-db
-    cd ${SRC_DIR}
-    ./devops/build/automation/cloudberry/scripts/build-cloudberry.sh
+- name: Build Cloudberry main
+  shell: make -j$(nproc) --directory ${SRC_DIR}
   args:
     executable: /bin/bash
   become_user: "{{ cloudberry_admin_user }}"
+  environment:
+    SRC_DIR: "/home/{{ cloudberry_admin_user }}/cloudberry"
+    BUILD_DESTINATION: "/usr/local/cloudberry-db"
+    LD_LIBRARY_PATH: "/usr/local/cloudberry-db/lib"
+
+- name: Build Cloudberry contrib
+  shell: make -j$(nproc) --directory ${SRC_DIR}/contrib
+  args:
+    executable: /bin/bash
+  become_user: "{{ cloudberry_admin_user }}"
+  environment:
+    SRC_DIR: "/home/{{ cloudberry_admin_user }}/cloudberry"
+    BUILD_DESTINATION: "/usr/local/cloudberry-db"
+    LD_LIBRARY_PATH: "/usr/local/cloudberry-db/lib"
+
+- name: Install Cloudberry main
+  shell: make install --directory ${SRC_DIR}
+  args:
+    executable: /bin/bash
+  become_user: "{{ cloudberry_admin_user }}"
+  environment:
+    SRC_DIR: "/home/{{ cloudberry_admin_user }}/cloudberry"
+    BUILD_DESTINATION: "/usr/local/cloudberry-db"
+
+- name: Install Cloudberry contrib
+  shell: make install --directory ${SRC_DIR}/contrib
+  args:
+    executable: /bin/bash
+  become_user: "{{ cloudberry_admin_user }}"
+  environment:
+    SRC_DIR: "/home/{{ cloudberry_admin_user }}/cloudberry"
+    BUILD_DESTINATION: "/usr/local/cloudberry-db"
 
 - name: Set installation directory ownership
   shell: chown -R {{ cloudberry_admin_user }}:{{ cloudberry_admin_user }} /usr/local/cloudberry*
