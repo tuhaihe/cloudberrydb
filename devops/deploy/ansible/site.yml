@@ -28,18 +28,53 @@
   tasks:
 
     # --- SELinux ---
-    - name: Disable SELinux
+    # On RHEL/Rocky Linux, SELinux must be disabled.
+    # On Ubuntu, SELinux is not installed by default and this task is skipped.
+    # If SELinux is installed on Ubuntu, it will also be disabled.
+    - name: Disable SELinux (RHEL/Rocky Linux)
       selinux:
         state: disabled
       when: ansible_os_family == "RedHat"
 
+    - name: Disable SELinux if installed (Ubuntu)
+      shell: |
+        if dpkg -l selinux-basics &>/dev/null 2>&1; then
+          setenforce 0 2>/dev/null || true
+          sed -i 's/^SELINUX=.*/SELINUX=disabled/' /etc/selinux/config 2>/dev/null || true
+          echo "SELinux disabled"
+        else
+          echo "SELinux not installed, skipping"
+        fi
+      args:
+        executable: /bin/bash
+      when: ansible_os_family == "Debian"
+      register: selinux_ubuntu_result
+      changed_when: "'SELinux disabled' in selinux_ubuntu_result.stdout"
+
     # --- Firewall ---
-    - name: Stop and disable firewalld
+    # RHEL/Rocky Linux: stop and disable firewalld
+    # Ubuntu: ufw is disabled by default; disable it if active
+    - name: Stop and disable firewalld (RHEL/Rocky Linux)
       systemd:
         name: firewalld
         state: stopped
         enabled: no
+      when: ansible_os_family == "RedHat"
       ignore_errors: yes
+
+    - name: Disable ufw if active (Ubuntu)
+      shell: |
+        if ufw status | grep -q "Status: active"; then
+          ufw disable
+          echo "ufw disabled"
+        else
+          echo "ufw already inactive, skipping"
+        fi
+      args:
+        executable: /bin/bash
+      when: ansible_os_family == "Debian"
+      register: ufw_result
+      changed_when: "'ufw disabled' in ufw_result.stdout"
 
     # --- Hosts file ---
     - name: Set hostname
@@ -211,16 +246,48 @@
       command: "/sbin/blockdev --setra 16384 {{ data_disk }}"
       changed_when: false
 
-    - name: Set I/O scheduler via grubby
+    - name: Set I/O scheduler via grubby (RHEL/Rocky Linux)
       command: grubby --update-kernel=ALL --args="elevator=mq-deadline"
       ignore_errors: yes
       changed_when: false
+      when: ansible_os_family == "RedHat"
+
+    - name: Set I/O scheduler via grub (Ubuntu)
+      shell: |
+        if grep -q "elevator=mq-deadline" /etc/default/grub; then
+          echo "elevator already set, skipping"
+        else
+          sed -i 's/GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 elevator=mq-deadline"/' /etc/default/grub
+          update-grub
+          echo "elevator set"
+        fi
+      args:
+        executable: /bin/bash
+      when: ansible_os_family == "Debian"
+      register: grub_elevator_result
+      changed_when: "'elevator set' in grub_elevator_result.stdout"
 
     # --- THP ---
-    - name: Disable Transparent Huge Pages via grubby
+    - name: Disable Transparent Huge Pages via grubby (RHEL/Rocky Linux)
       command: grubby --update-kernel=ALL --args="transparent_hugepage=never"
       ignore_errors: yes
       changed_when: false
+      when: ansible_os_family == "RedHat"
+
+    - name: Disable Transparent Huge Pages via grub (Ubuntu)
+      shell: |
+        if grep -q "transparent_hugepage=never" /etc/default/grub; then
+          echo "THP already disabled, skipping"
+        else
+          sed -i 's/GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 transparent_hugepage=never"/' /etc/default/grub
+          update-grub
+          echo "THP disabled"
+        fi
+      args:
+        executable: /bin/bash
+      when: ansible_os_family == "Debian"
+      register: grub_thp_result
+      changed_when: "'THP disabled' in grub_thp_result.stdout"
 
     # --- IPC ---
     - name: Disable IPC object removal
@@ -246,11 +313,20 @@
       notify: restart sshd
 
     # --- Clock sync ---
-    - name: Enable and start chronyd
+    # RHEL/Rocky Linux uses chronyd; Ubuntu uses chrony (package name differs)
+    - name: Enable and start chronyd (RHEL/Rocky Linux)
       systemd:
         name: chronyd
         state: started
         enabled: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Enable and start chrony (Ubuntu)
+      systemd:
+        name: chrony
+        state: started
+        enabled: yes
+      when: ansible_os_family == "Debian"
 
     # --- gpadmin user ---
     - name: Create gpadmin group
@@ -266,18 +342,35 @@
         create_home: yes
         password: "{{ cloudberry_admin_password | password_hash('sha512') }}"
 
-    - name: Add gpadmin to wheel group
+    - name: Add gpadmin to wheel group and enable NOPASSWD sudo (RHEL/Rocky Linux)
       user:
         name: "{{ cloudberry_admin_user }}"
         groups: wheel
         append: yes
+      when: ansible_os_family == "RedHat"
 
-    - name: Ensure wheel group has NOPASSWD sudo
+    - name: Ensure wheel group has NOPASSWD sudo (RHEL/Rocky Linux)
       lineinfile:
         path: /etc/sudoers
         regexp: "^%wheel"
         line: "%wheel ALL=(ALL) NOPASSWD: ALL"
         validate: "visudo -cf %s"
+      when: ansible_os_family == "RedHat"
+
+    - name: Add gpadmin to sudo group (Ubuntu)
+      user:
+        name: "{{ cloudberry_admin_user }}"
+        groups: sudo
+        append: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Create sudoers drop-in file for gpadmin (Ubuntu)
+      copy:
+        content: "gpadmin ALL=(ALL) NOPASSWD: ALL\n"
+        dest: /etc/sudoers.d/gpadmin
+        mode: "0440"
+        validate: "visudo -cf %s"
+      when: ansible_os_family == "Debian"
 
     - name: Set data directory ownership
       file:
@@ -376,12 +469,12 @@
         dest: "/home/{{ cloudberry_admin_user }}/hostfile_gpinitsystem"
 
     - name: Scan and trust host keys for all cluster nodes
-      shell: |
-        ssh-keyscan -H {{ groups['cloudberry'] | join(' ') }} >> /home/{{ cloudberry_admin_user }}/.ssh/known_hosts
-        chown {{ cloudberry_admin_user }}:{{ cloudberry_admin_user }} /home/{{ cloudberry_admin_user }}/.ssh/known_hosts
-        chmod 600 /home/{{ cloudberry_admin_user }}/.ssh/known_hosts
-      args:
-        executable: /bin/bash
+      known_hosts:
+        name: "{{ item }}"
+        key: "{{ lookup('pipe', 'ssh-keyscan -H ' + item) }}"
+        state: present
+        path: "/home/{{ cloudberry_admin_user }}/.ssh/known_hosts"
+      loop: "{{ groups['cloudberry'] }}"
 
     - name: Run gpssh-exkeys
       shell: |
@@ -489,6 +582,13 @@
           DATABASE_NAME={{ database_name }}
         dest: "/home/{{ cloudberry_admin_user }}/gpconfigs/gpinitsystem_config"
 
+    - name: Check if cluster is already initialized
+      stat:
+        path: "{{ coordinator_data_dir }}/gpseg-1/PG_VERSION"
+      register: pgversion_stat
+      become: yes
+      become_user: root
+
     - name: Run gpinitsystem
       shell: |
         source /usr/local/cloudberry-db/cloudberry-env.sh
@@ -499,6 +599,7 @@
         executable: /bin/bash
       register: gpinitsystem_result
       failed_when: "'successfully created' not in gpinitsystem_result.stdout"
+      when: not pgversion_stat.stat.exists
 
     - name: Set environment variables in .bashrc
       blockinfile:
