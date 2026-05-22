@@ -15,11 +15,10 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-# Apache Cloudberry - Bare Metal Deployment Playbook (RPM/DEB)
+# Apache Cloudberry - Bare Metal Deployment Playbook (Source Build)
 #
 # Usage:
-#   ansible-playbook site.yml -i inventory/hosts \
-#       -e package_path=./apache-cloudberry-db-incubating-2.1.0.el8.x86_64.rpm
+#   ansible-playbook site-from-source.yml -i inventory/hosts
 
 ---
 - name: Configure all hosts
@@ -28,11 +27,11 @@
   roles:
     - common
 
-- name: Install Apache Cloudberry package
+- name: Build and install Apache Cloudberry from source
   hosts: cloudberry
   become: yes
   roles:
-    - install_package
+    - install_from_source
 
 - name: Configure SSH and create data directories
   hosts: coordinator

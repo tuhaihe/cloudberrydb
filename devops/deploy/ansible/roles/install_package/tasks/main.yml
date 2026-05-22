@@ -14,38 +14,31 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#
-# Apache Cloudberry - Bare Metal Deployment Playbook (RPM/DEB)
-#
-# Usage:
-#   ansible-playbook site.yml -i inventory/hosts \
-#       -e package_path=./apache-cloudberry-db-incubating-2.1.0.el8.x86_64.rpm
 
 ---
-- name: Configure all hosts
-  hosts: cloudberry
-  become: yes
-  roles:
-    - common
+- name: Copy package to host
+  copy:
+    src: "{{ package_path }}"
+    dest: "/tmp/{{ package_path | basename }}"
 
-- name: Install Apache Cloudberry package
-  hosts: cloudberry
-  become: yes
-  roles:
-    - install_package
+- name: Install package (RPM)
+  yum:
+    name: "/tmp/{{ package_path | basename }}"
+    state: present
+    disable_gpg_check: yes
+  when: ansible_os_family == "RedHat"
 
-- name: Configure SSH and create data directories
-  hosts: coordinator
-  become: yes
-  become_user: gpadmin
-  roles:
-    - ssh
+- name: Install package (DEB)
+  apt:
+    deb: "/tmp/{{ package_path | basename }}"
+    state: present
+  when: ansible_os_family == "Debian"
 
-- name: Initialize Apache Cloudberry cluster
-  hosts: coordinator
-  become: yes
-  become_user: gpadmin
-  vars:
-    cloudberry_admin_user: "gpadmin"
-  roles:
-    - initialize
+- name: Cleanup package file
+  file:
+    path: "/tmp/{{ package_path | basename }}"
+    state: absent
+
+- name: Set installation directory ownership
+  shell: chown -R {{ cloudberry_admin_user }}:{{ cloudberry_admin_user }} /usr/local/cloudberry*
+  changed_when: false

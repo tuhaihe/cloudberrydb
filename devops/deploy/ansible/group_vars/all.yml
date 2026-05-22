@@ -23,7 +23,12 @@
 # See the "Calculate dynamic sysctl values" tasks in site.yml.
 
 # Cloudberry version
+# Used for both RPM/DEB package naming and source build download URL.
 cloudberry_version: "2.1.0"
+
+# Apache Xerces-C version (required for source build on RHEL/Rocky Linux)
+# Ubuntu uses the system libxerces-c-dev package instead.
+xerces_version: "3.3.0"
 
 # Admin user
 cloudberry_admin_user: "gpadmin"

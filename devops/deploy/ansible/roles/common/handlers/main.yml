@@ -14,38 +14,14 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#
-# Apache Cloudberry - Bare Metal Deployment Playbook (RPM/DEB)
-#
-# Usage:
-#   ansible-playbook site.yml -i inventory/hosts \
-#       -e package_path=./apache-cloudberry-db-incubating-2.1.0.el8.x86_64.rpm
 
 ---
-- name: Configure all hosts
-  hosts: cloudberry
-  become: yes
-  roles:
-    - common
+- name: restart systemd-logind
+  service:
+    name: systemd-logind
+    state: restarted
 
-- name: Install Apache Cloudberry package
-  hosts: cloudberry
-  become: yes
-  roles:
-    - install_package
-
-- name: Configure SSH and create data directories
-  hosts: coordinator
-  become: yes
-  become_user: gpadmin
-  roles:
-    - ssh
-
-- name: Initialize Apache Cloudberry cluster
-  hosts: coordinator
-  become: yes
-  become_user: gpadmin
-  vars:
-    cloudberry_admin_user: "gpadmin"
-  roles:
-    - initialize
+- name: restart sshd
+  service:
+    name: sshd
+    state: restarted
