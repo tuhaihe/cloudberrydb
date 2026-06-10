@@ -159,7 +159,7 @@ jobs:
           sudo sysctl -w net.local.dgram.maxdgram=16384
           sudo sysctl -w net.inet.tcp.sendspace=262144
           sudo sysctl -w net.inet.tcp.recvspace=262144
-          sudo sysctl -w kern.ipc.maxsockbuf=8388608
+          sudo sysctl -w kern.ipc.maxsockbuf=6291456
 
           # ---- Hostname resolution for segment communication ----
           echo "127.0.0.1 $(hostname)" | sudo tee -a /etc/hosts
