@@ -4079,13 +4079,25 @@ def impl(context):
     for host in host_to_pid_map:
         for pid in host_to_pid_map[host]:
             # gpstop/gpstart can return before every saved pid fully exits.
-            # Poll briefly to avoid flaking on processes that are already shutting down.
-            for _ in range(60):
+            # Poll briefly to avoid flaking on processes that are
+            # already shutting down.
+            for _ in range(10):
                 if not unix.check_pid_on_remotehost(pid, host):
                     break
                 time.sleep(1)
             else:
-                raise Exception("Postgres process {0} not killed on {1}.".format(pid, host))
+                # Process still alive after 10s; try forceful kill
+                # then re-check.
+                cmd = Command("kill process", "kill -9 %d" % pid,
+                              ctxt=REMOTE, remoteHost=host)
+                cmd.run()
+                for _ in range(30):
+                    if not unix.check_pid_on_remotehost(pid, host):
+                        break
+                    time.sleep(1)
+                else:
+                    raise Exception(
+                        "Postgres process {0} not killed on {1}.".format(pid, host))
 
 
 @then('the database segments are in execute mode')

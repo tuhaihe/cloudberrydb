@@ -141,7 +141,9 @@ jobs:
                "behave_features":["test/behave/mgmt_utils/gpstate.feature"],
                "behave_args":"--tags ~@concourse_cluster"
               },
-              {"test":"ic-behave-gpstop","behave_features":["test/behave/mgmt_utils/gpstop.feature"]},
+              {"test":"ic-behave-gpstop","behave_features":["test/behave/mgmt_utils/gpstop.feature"],
+               "behave_args":"--tags ~@concourse_cluster"
+              },
               {"test":"ic-behave-gpssh",
                "behave_features":["test/behave/mgmt_utils/gpssh.feature"],
                "behave_args":"--tags ~@requires_netem"
@@ -442,6 +444,7 @@ jobs:
 
           # Ensure hostname resolves to IPv4, not ::1, so that gpinitsystem
           # generates pg_hba.conf entries that gpstop/gpstart can use.
+          sed -i 's/^::1[[:space:]]\+cdw/#&/' /etc/hosts
           echo '127.0.0.1 cdw' >> /etc/hosts
 
       - name: Generate Behave Job Summary Start

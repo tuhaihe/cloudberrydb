@@ -46,6 +46,8 @@ Feature: gprecoverseg tests
         And all the segments are running
         And the segments are synchronized
 
+  @demo_cluster
+  @concourse_cluster
   Scenario Outline: <scenario> recovery works with tablespaces
         Given the database is running
           And user stops all primary processes
