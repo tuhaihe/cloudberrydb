@@ -440,6 +440,10 @@ jobs:
 
           echo "SRC_DIR=${GITHUB_WORKSPACE}" | tee -a "$GITHUB_ENV"
 
+          # Ensure hostname resolves to IPv4, not ::1, so that gpinitsystem
+          # generates pg_hba.conf entries that gpstop/gpstart can use.
+          echo '127.0.0.1 cdw' >> /etc/hosts
+
       - name: Generate Behave Job Summary Start
         if: always()
         run: |
