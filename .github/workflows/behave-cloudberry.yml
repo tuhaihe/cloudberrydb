@@ -444,7 +444,7 @@ jobs:
 
           # Ensure hostname resolves to IPv4, not ::1, so that gpinitsystem
           # generates pg_hba.conf entries that gpstop/gpstart can use.
-          sed -i 's/^::1[[:space:]]\+cdw/#&/' /etc/hosts
+          grep -v '^::1.*cdw' /etc/hosts > /tmp/hosts && cp /tmp/hosts /etc/hosts
           echo '127.0.0.1 cdw' >> /etc/hosts
 
       - name: Generate Behave Job Summary Start
