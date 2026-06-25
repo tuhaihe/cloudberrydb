@@ -447,6 +447,10 @@ jobs:
           grep -v '^::1.*cdw' /etc/hosts > /tmp/hosts && cp /tmp/hosts /etc/hosts
           echo '127.0.0.1 cdw' >> /etc/hosts
 
+          # Pre-populate SSH known_hosts for the demo cluster hostname
+          # to avoid host-key prompts during SSH-based gp commands.
+          ssh-keyscan $(hostname) >> ~/.ssh/known_hosts 2>/dev/null
+
       - name: Generate Behave Job Summary Start
         if: always()
         run: |
