@@ -449,7 +449,9 @@ jobs:
 
           # Pre-populate SSH known_hosts for the demo cluster hostname
           # to avoid host-key prompts during SSH-based gp commands.
-          ssh-keyscan $(hostname) >> ~/.ssh/known_hosts 2>/dev/null
+          mkdir -p /home/gpadmin/.ssh
+          ssh-keyscan $(hostname) >> /home/gpadmin/.ssh/known_hosts 2>/dev/null
+          chown -R gpadmin:gpadmin /home/gpadmin/.ssh
 
       - name: Generate Behave Job Summary Start
         if: always()
