@@ -42,6 +42,7 @@ except ImportError as e:
 EXECNAME = 'analyzedb'
 STATEFILE_DIR = 'db_analyze'
 logger = gplog.get_default_logger()
+
 WRITE_LOCK_FILE_NAME = "write_lock_semaphore"
 ANALYZE_GUCS = "set optimizer_analyze_root_partition=off; "
 ANALYZE_SQL = """analyze %s"""

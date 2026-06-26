@@ -783,6 +783,12 @@ BUILD_COORDINATOR_PG_HBA_FILE () {
         else
             $ECHO "host     all         $USER_NAME         localhost    trust" >> ${GP_DIR}/$PG_HBA
             $ECHO "host     all         $USER_NAME         $COORDINATOR_HOSTNAME       trust" >> ${GP_DIR}/$PG_HBA
+            # Also add IPv6 loopback entries so that connections via ::1 are accepted
+            for ADDR in "${COORDINATOR_IPV6_LOCAL_ADDRESS_ALL[@]}"
+            do
+                CIDRADDR=$(GET_CIDRADDR $ADDR)
+                $ECHO "host     all         $USER_NAME         $CIDRADDR       trust" >> ${GP_DIR}/$PG_HBA
+            done
         fi
 
 

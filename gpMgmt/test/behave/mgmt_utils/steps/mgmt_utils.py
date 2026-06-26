@@ -1817,12 +1817,19 @@ def impl(context):
     check_stat_replication_query = "SELECT * FROM pg_stat_replication"
     with closing(dbconn.connect(dbconn.DbURL(dbname='postgres'), unsetSearchPath=False)) as conn:
         segconfig = dbconn.query(conn, check_segment_config_query).fetchall()
-        statrep = dbconn.query(conn, check_stat_replication_query).fetchall()
 
     if len(segconfig) != 1:
         raise Exception("gp_segment_configuration did not have standby coordinator")
 
-    if len(statrep) != 1:
+    # In PG16 the WAL sender may take a moment to appear in
+    # pg_stat_replication after gpinitstandby returns.
+    for _ in range(30):
+        with closing(dbconn.connect(dbconn.DbURL(dbname='postgres'), unsetSearchPath=False)) as conn:
+            statrep = dbconn.query(conn, check_stat_replication_query).fetchall()
+        if len(statrep) == 1:
+            break
+        time.sleep(1)
+    else:
         raise Exception("pg_stat_replication did not have standby coordinator")
 
     context.standby_dbid = segconfig[0][0]
