@@ -444,7 +444,9 @@ jobs:
 
           # Ensure hostname resolves to IPv4, not ::1, so that gpinitsystem
           # generates pg_hba.conf entries that gpstop/gpstart can use.
-          grep -v '^::1.*cdw' /etc/hosts > /tmp/hosts && cp /tmp/hosts /etc/hosts
+          # Note: Do NOT remove ::1 cdw mapping. The demo cluster may be
+          # configured with IPv6 loopback addresses, and removing ::1 would
+          # cause SSH-based pg_ctl operations to fail.
           echo '127.0.0.1 cdw' >> /etc/hosts
 
           # Pre-populate SSH known_hosts for the demo cluster hostname
