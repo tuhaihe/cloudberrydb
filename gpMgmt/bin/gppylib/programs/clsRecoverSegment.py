@@ -252,6 +252,11 @@ class GpRecoverSegmentProgram:
         gpEnv = GpCoordinatorEnvironment(self.__options.coordinatorDataDirectory, True)
 
         # verify "where to recover" options
+        if self.__options.differentialResynchronization:
+            if self.__options.forceFullResynchronization:
+                raise ProgramArgumentValidationException("Only one of -F and --differential may be specified")
+            if self.__options.outputSampleConfigFile is not None:
+                raise ProgramArgumentValidationException("Invalid -o provided with --differential argument")
         optionCnt = 0
         if self.__options.newRecoverHosts is not None:
             optionCnt += 1
@@ -259,8 +264,10 @@ class GpRecoverSegmentProgram:
             optionCnt += 1
         if self.__options.rebalanceSegments:
             optionCnt += 1
+        if self.__options.differentialResynchronization:
+            optionCnt += 1
         if optionCnt > 1:
-            raise ProgramArgumentValidationException("Only one of -i, -p, and -r may be specified")
+            raise ProgramArgumentValidationException("Only one of -p, -r and --differential may be specified")
 
         faultProberInterface.getFaultProber().initializeProber(gpEnv.getCoordinatorPort())
 
@@ -487,6 +494,9 @@ class GpRecoverSegmentProgram:
                          dest="forceFullResynchronization",
                          metavar="<forceFullResynchronization>",
                          help="Force full segment resynchronization")
+        addTo.add_option('--differential', None, default=False, action='store_true',
+                         dest='differentialResynchronization',
+                         help='Differential segment resynchronization')
         addTo.add_option("-B", None, type="int", default=gp.DEFAULT_COORDINATOR_NUM_WORKERS,
                          dest="parallelDegree",
                          metavar="<parallelDegree>",
