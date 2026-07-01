@@ -220,7 +220,8 @@ def stop_database(context):
         # Some gpinitsystem scenarios intentionally generate pg_hba.conf that
         # blocks gpstop's coordinator connection. Fall back to local pg_ctl so
         # later scenarios still start from a clean cluster.
-        if context.error_message and 'no pg_hba.conf entry' in context.error_message:
+        stop_output = '%s\n%s' % (context.error_message or '', context.stdout_message or '')
+        if 'no pg_hba.conf entry' in stop_output:
             coordinator_data_dir = get_coordinatordatadir()
             subprocess.check_call([
                 'bash', '-lc',

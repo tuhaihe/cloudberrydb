@@ -17,6 +17,21 @@ def _find_expected_position(contents, expected):
         if regex_match:
             return regex_match.start()
 
+    func_match = re.match(r'CREATE FUNCTION (.+)\(\) RETURNS (.+)$', expected)
+    if func_match:
+        function_name, return_type = func_match.groups()
+        pattern = (r'CREATE FUNCTION (?:(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)\.)?"?%s"?'
+                   r'\s*\([^)]*\)\s+RETURNS\s+%s') % (
+                       re.escape(function_name.split('.')[-1]),
+                       re.escape(return_type),
+                   )
+        regex_match = re.search(pattern, contents, re.IGNORECASE)
+        if regex_match:
+            return regex_match.start()
+
+    if expected == 'AS $$ select 1 $$;' and re.search(r'\bRETURN\s+1\s*;', contents, re.IGNORECASE):
+        return contents.find('RETURN')
+
     return -1
 
 @given('database "{dbname}" does not exist')

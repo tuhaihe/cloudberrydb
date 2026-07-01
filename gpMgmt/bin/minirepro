@@ -74,6 +74,11 @@ sysnslist = "('pg_toast', 'pg_bitmapindex', 'pg_catalog', 'information_schema', 
 # unset search path due to CVE-2018-1058
 pgoptions = '-c optimizer=off -c gp_role=utility -c search_path='
 
+
+def escape_sql_literal(value):
+    return value.replace("'", "''")
+
+
 class MRQuery(object):
     def __init__(self):
         self.schemas = []
@@ -136,7 +141,7 @@ def dump_query(connectionInfo, query_file):
 
     with open(query_file, 'r') as query_f:
         sql_text = query_f.read()
-    query = "select pg_catalog.gp_dump_query_oids('%s')" % Escape(sql_text)
+    query = "select pg_catalog.gp_dump_query_oids('%s')" % escape_sql_literal(sql_text)
 
     toolkit_sql = PATH_PREFIX + 'toolkit.sql'
     with open(toolkit_sql, 'w') as toolkit_f:

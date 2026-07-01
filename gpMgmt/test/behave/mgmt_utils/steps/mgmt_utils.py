@@ -4062,48 +4062,33 @@ def impl(context):
 @when('running postgres processes are saved in context')
 @then('running postgres processes are saved in context')
 def impl(context):
-
-    # Store the pids in a dictionary where key will be the hostname and the
-    # value will be the pids of all the postgres processes running on that host
-    host_to_pid_map = dict()
+    # Store segment postmaster identities by datadir. Checking old PIDs is
+    # brittle because PID reuse or already-orphaned children can make a stopped
+    # segment look alive.
+    host_to_datadir_map = dict()
     segs = GpArray.initFromCatalog(dbconn.DbURL()).getDbList()
     for seg in segs:
-        pids = gp.get_postgres_segment_processes(seg.datadir, seg.hostname)
-        if seg.hostname not in host_to_pid_map:
-            host_to_pid_map[seg.hostname] = pids
-        else:
-            host_to_pid_map[seg.hostname].extend(pids)
+        host_to_datadir_map.setdefault(seg.hostname, set()).add(seg.datadir)
 
-    context.host_to_pid_map = host_to_pid_map
+    context.host_to_datadir_map = host_to_datadir_map
 
 
 @given('verify no postgres process is running on all hosts')
 @when('verify no postgres process is running on all hosts')
 @then('verify no postgres process is running on all hosts')
 def impl(context):
-    host_to_pid_map = context.host_to_pid_map
+    host_to_datadir_map = context.host_to_datadir_map
 
-    for host in host_to_pid_map:
-        for pid in host_to_pid_map[host]:
-            # gpstop/gpstart can return before every saved pid fully exits.
-            # Poll to avoid flaking on processes that are already shutting down.
+    for host in host_to_datadir_map:
+        for datadir in host_to_datadir_map[host]:
+            # gpstop can return while postmasters are still exiting.
             for _ in range(60):
-                if not unix.check_pid_on_remotehost(pid, host):
+                if gp.getPostmasterPID(host, datadir) == -1:
                     break
                 time.sleep(1)
             else:
-                # Process still alive after 60s; try forceful kill
-                # then re-check.
-                cmd = Command("kill process", "kill -9 %d" % pid,
-                              ctxt=REMOTE, remoteHost=host)
-                cmd.run()
-                for _ in range(10):
-                    if not unix.check_pid_on_remotehost(pid, host):
-                        break
-                    time.sleep(1)
-                else:
-                    raise Exception(
-                        "Postgres process {0} not killed on {1}.".format(pid, host))
+                raise Exception(
+                    "Postgres postmaster for {0} not stopped on {1}.".format(datadir, host))
 
 
 @then('the database segments are in execute mode')

@@ -991,9 +991,7 @@ def get_oid_str(table_list):
 # to_regclass returns NULL instead of an error if the table does not exist
 def regclass_schema_tbl(schema, tbl):
     schema_tbl = "%s.%s" % (escape_identifier(schema), escape_identifier(tbl))
-    escaped = pg.escape_string(schema_tbl)
-    if isinstance(escaped, bytes):
-        escaped = escaped.decode('utf-8')
+    escaped = schema_tbl.replace("'", "''")
     return "to_regclass('%s')" % escaped
 
 

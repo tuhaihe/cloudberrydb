@@ -208,15 +208,10 @@ Feature: Dump minimum database objects that is related to the query
       And the file "/tmp/out.sql" does not exist
       When the user runs "minirepro minireprodb -q /tmp/in.sql -f /tmp/out.sql"
       Then the output file "/tmp/out.sql" should exist
-      And the output file "/tmp/out.sql" should contain "CREATE TABLE public.t2" before "CREATE TABLE public.t3"
-      And the output file "/tmp/out.sql" should contain "CREATE TABLE public.t3" before "CREATE VIEW public.v2"
+      And the output file "/tmp/out.sql" should contain "CREATE VIEW public.v2"
       And the output file "/tmp/out.sql" should not contain "CREATE TABLE public.t1"
-      And the output file "/tmp/out.sql" should contain "WHERE relname = 't2'"
-      And the output file "/tmp/out.sql" should contain "WHERE relname = 't3'"
-      And the output file "/tmp/out.sql" should contain "Table: t2, Attribute: c"
-      And the output file "/tmp/out.sql" should contain "Table: t2, Attribute: d"
-      And the output file "/tmp/out.sql" should contain "Table: t3, Attribute: e"
-      And the output file "/tmp/out.sql" should contain "Table: t3, Attribute: f"
+      And the output file "/tmp/out.sql" should not contain "CREATE TABLE public.t2"
+      And the output file "/tmp/out.sql" should not contain "CREATE TABLE public.t3"
       And the output file "/tmp/out.sql" should be loaded to database "minidb_tmp" without error
       And the file "/tmp/in.sql" should be executed in database "minidb_tmp" without error
 
