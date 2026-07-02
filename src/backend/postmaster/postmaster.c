@@ -3019,15 +3019,6 @@ canAcceptConnections(int backend_type)
 	if (pmState != PM_RUN && pmState != PM_HOT_STANDBY &&
 		backend_type != BACKEND_TYPE_BGWORKER)
 	{
-		/*
-		 * Cloudberry: Allow connections in utility mode regardless of
-		 * server state.  Utility mode is used by gpstart when starting a
-		 * standby coordinator to fetch the catalog, which requires
-		 * connecting to a server that is still in recovery.
-		 */
-		if (Gp_role == GP_ROLE_UTILITY)
-			return CAC_OK;
-
 		if (Shutdown > NoShutdown)
 			return CAC_SHUTDOWN;	/* shutdown is pending */
 		/*

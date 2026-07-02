@@ -3831,6 +3831,17 @@ def impl(context):
         rows = dbconn.query(conn, "SELECT name, setting FROM pg_settings WHERE name LIKE 'lc_%'").fetchall()
         context.database_locales = {row.name: row.setting for row in rows}
 
+        # Starting with PostgreSQL 15, lc_collate and lc_ctype are no longer
+        # exposed as server GUCs (they are per-database properties).  Fetch
+        # them from pg_database so the locale checks keep working on the
+        # PostgreSQL 16 based kernel.
+        db_rows = dbconn.query(conn,
+                               "SELECT datcollate, datctype FROM pg_database "
+                               "WHERE datname = current_database()").fetchall()
+        if db_rows:
+            context.database_locales['lc_collate'] = db_rows[0].datcollate
+            context.database_locales['lc_ctype'] = db_rows[0].datctype
+
 def check_locales(database_locales, locale_names, expected):
     locale_names = locale_names.split(',')
     for name in locale_names:
