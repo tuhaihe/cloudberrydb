@@ -7,7 +7,7 @@ from gppylib.recoveryinfo import RecoveryErrorType
 from gppylib.commands.pg import PgBaseBackup, PgRewind
 from recovery_base import RecoveryBase, set_recovery_cmd_results
 from gppylib.commands.base import Command
-from gppylib.commands.gp import SegmentStart
+from gppylib.commands.gp import SegmentStart, ModifyConfSetting
 from gppylib.gparray import Segment
 from gppylib.commands.unix import terminate_proc_tree
 
@@ -63,6 +63,20 @@ class FullRecovery(Command):
         self.error_type = RecoveryErrorType.DEFAULT_ERROR
         self.logger.info("Successfully ran pg_basebackup for dbid: {}".format(
             self.recovery_info.target_segment_dbid))
+        
+        # Fix postgresql.conf port after pg_basebackup
+        # pg_basebackup copies the primary's postgresql.conf which has wrong port
+        postgresql_conf = os.path.join(self.recovery_info.target_datadir, 'postgresql.conf')
+        modify_port_cmd = ModifyConfSetting(
+            'Updating port in postgresql.conf',
+            postgresql_conf,
+            'port',
+            self.recovery_info.target_port,
+            optType='number')
+        modify_port_cmd.run(validateAfter=True)
+        self.logger.info("Fixed postgresql.conf port to %d for segment at %s" % 
+                         (self.recovery_info.target_port, self.recovery_info.target_datadir))
+        
         self.error_type = RecoveryErrorType.START_ERROR
         start_segment(self.recovery_info, self.logger, self.era)
 
@@ -86,6 +100,19 @@ class IncrementalRecovery(Command):
                        self.recovery_info.source_port, self.recovery_info.progress_file)
         cmd.run(validateAfter=True)
         self.logger.info("Successfully ran pg_rewind for dbid: {}".format(self.recovery_info.target_segment_dbid))
+
+        # Fix postgresql.conf port after pg_rewind
+        # pg_rewind may have copied postgresql.conf from the source which has wrong port
+        postgresql_conf = os.path.join(self.recovery_info.target_datadir, 'postgresql.conf')
+        modify_port_cmd = ModifyConfSetting(
+            'Updating port in postgresql.conf',
+            postgresql_conf,
+            'port',
+            self.recovery_info.target_port,
+            optType='number')
+        modify_port_cmd.run(validateAfter=True)
+        self.logger.info("Fixed postgresql.conf port to %d for segment at %s" % 
+                         (self.recovery_info.target_port, self.recovery_info.target_datadir))
 
         self.error_type = RecoveryErrorType.START_ERROR
         start_segment(self.recovery_info, self.logger, self.era)
