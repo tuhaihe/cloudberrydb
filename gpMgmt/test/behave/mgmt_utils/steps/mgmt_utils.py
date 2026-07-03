@@ -1814,7 +1814,10 @@ def impl(context):
 @then('verify the standby coordinator entries in catalog')
 def impl(context):
     check_segment_config_query = "SELECT * FROM gp_segment_configuration WHERE content = -1 AND role = 'm'"
-    check_stat_replication_query = "SELECT * FROM pg_stat_replication"
+    # In PG16, pg_stat_replication may contain multiple rows from different sources
+    # (e.g., gp_walreceiver for standby, pg_rewind, backup tools). Filter by
+    # application_name to identify the standby coordinator's WAL receiver connection.
+    check_stat_replication_query = "SELECT * FROM pg_stat_replication WHERE application_name = 'gp_walreceiver'"
     with closing(dbconn.connect(dbconn.DbURL(dbname='postgres'), unsetSearchPath=False)) as conn:
         segconfig = dbconn.query(conn, check_segment_config_query).fetchall()
 
@@ -1826,7 +1829,7 @@ def impl(context):
     for _ in range(30):
         with closing(dbconn.connect(dbconn.DbURL(dbname='postgres'), unsetSearchPath=False)) as conn:
             statrep = dbconn.query(conn, check_stat_replication_query).fetchall()
-        if len(statrep) == 1:
+        if len(statrep) >= 1:
             break
         time.sleep(1)
     else:
