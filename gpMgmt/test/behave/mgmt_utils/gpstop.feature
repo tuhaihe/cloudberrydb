@@ -68,7 +68,7 @@ Feature: gpstop behave tests
     Scenario: gpstop succeeds when pg_ctl command fails
         Given the database is running
           And the user runs psql with "-c "CREATE EXTENSION IF NOT EXISTS gp_inject_fault;"" against database "postgres"
-          And the user runs psql with "-c "SELECT gp_inject_fault('checkpoint', 'sleep', '', '', '', 1, -1, 3600, dbid) FROM gp_segment_configuration"" against database "postgres"
+          And the user runs psql with "-c "SELECT gp_inject_fault('checkpoint', 'sleep', '', '', '', 1, -1, 3600, dbid) FROM gp_segment_configuration WHERE content = -1 AND role = 'p'"" against database "postgres"
           And running postgres processes are saved in context
          When the user runs "gpstop -a -M fast"
           And gpstop should print "Failed to shutdown coordinator with pg_ctl." to stdout

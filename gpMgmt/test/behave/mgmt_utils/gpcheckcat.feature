@@ -381,7 +381,7 @@ Feature: gpcheckcat tests
         And the user runs "psql extra_pk_db -c 'CREATE SCHEMA my_pk_schema' "
         And the user runs "psql extra_pk_db -f test/behave/mgmt_utils/steps/data/gpcheckcat/add_operator.sql "
         Then psql should return a return code of 0
-        And the user runs "psql extra_pk_db -c "set allow_system_table_mods=true;DELETE FROM pg_catalog.pg_operator where oprname='!#'" "
+        And the user runs sql "set allow_system_table_mods=true;DELETE FROM pg_catalog.pg_operator where oprname='!#'" in "extra_pk_db" on first primary segment
         Then psql should return a return code of 0
         When the user runs "gpcheckcat -R missing_extraneous extra_pk_db"
         Then gpcheckcat should return a return code of 3

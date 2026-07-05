@@ -170,6 +170,23 @@ def parse_oids(cursor, json_oids):
     if len(result.funcids) == 0:
         result.funcids = '0'
 
+    # In PG16, gp_dump_query_oids may return only view OIDs without their
+    # dependent table OIDs. Expand view dependencies so pg_dump includes
+    # the tables that views reference.
+    dep_query = "SELECT DISTINCT d.refobjid FROM pg_depend d " \
+                "JOIN pg_class c ON d.classid = 'pg_rewrite'::regclass " \
+                "JOIN pg_rewrite r ON d.objid = r.oid " \
+                "WHERE r.ev_class IN (%s) AND d.refobjid != r.ev_class " \
+                "AND d.refclassid = 'pg_class'::regclass " \
+                "AND d.refobjid NOT IN (%s)" % (result.relids, result.relids)
+    try:
+        cursor.execute(dep_query)
+        dep_oids = [str(row[0]) for row in result_iter(cursor)]
+        if dep_oids:
+            result.relids = result.relids + ',' + ','.join(dep_oids)
+    except Exception:
+        pass  # if dependency query fails, proceed with original oids
+
     cat_query = "SELECT distinct(nspname) FROM pg_class c, pg_namespace n WHERE " \
                 "c.relnamespace = n.oid AND c.oid IN (%s) " \
                 "AND n.nspname NOT IN %s" % (result.relids, sysnslist)

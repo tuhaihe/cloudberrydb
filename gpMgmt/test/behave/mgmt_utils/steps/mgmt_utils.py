@@ -1824,9 +1824,10 @@ def impl(context):
     if len(segconfig) != 1:
         raise Exception("gp_segment_configuration did not have standby coordinator")
 
-    # In PG16 the WAL sender may take a moment to appear in
-    # pg_stat_replication after gpinitstandby returns.
-    for _ in range(30):
+    # In PG16 the WAL sender may take longer to appear in
+    # pg_stat_replication after gpinitstandby returns, especially
+    # when standby is re-created after removal on a single-host cluster.
+    for _ in range(60):
         with closing(dbconn.connect(dbconn.DbURL(dbname='postgres'), unsetSearchPath=False)) as conn:
             statrep = dbconn.query(conn, check_stat_replication_query).fetchall()
         if len(statrep) >= 1:
@@ -2768,6 +2769,18 @@ def impl(context, filepath):
 def impl(context, command, target):
     log_dir = _get_gpAdminLogs_directory()
     filename = glob.glob('%s/%s_*.log' % (log_dir, command))[0]
+    contents = ''
+    with open(filename) as fr:
+        for line in fr:
+            contents += line
+    if target not in contents:
+        raise Exception("cannot find %s in %s" % (target, filename))
+
+@then('{command} should print "{target}" to logfile with latest timestamp')
+def impl(context, command, target):
+    log_dir = _get_gpAdminLogs_directory()
+    filenames = glob.glob('%s/%s_*.log' % (log_dir, command))
+    filename = max(filenames, key=os.path.getctime)
     contents = ''
     with open(filename) as fr:
         for line in fr:
