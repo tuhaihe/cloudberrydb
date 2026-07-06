@@ -14,7 +14,11 @@ from .unix import *
 from gppylib.commands.base import *
 from gppylib.commands.gp import RECOVERY_REWIND_APPNAME
 from gppylib.db import dbconn
-from pg8000.native import DatabaseError
+
+try:
+    from pgdb import DatabaseError
+except ImportError:
+    DatabaseError = Exception
 
 logger = get_default_logger()
 
