@@ -27,6 +27,7 @@ from gppylib.util import gp_utils
 from gppylib.commands import gp, pg, unix
 from gppylib.commands.base import Command, WorkerPool, REMOTE
 from gppylib.db import dbconn
+from gppylib.db.catalog import RemoteQueryCommand
 from gppylib.gpparseopts import OptParser, OptChecker
 from gppylib.operations.detect_unreachable_hosts import get_unreachable_segment_hosts, update_unreachable_flag_for_segments
 from gppylib.operations.startSegments import *
@@ -46,26 +47,6 @@ from gppylib.programs.clsRecoverSegment_triples import RecoveryTripletsFactory
 
 logger = gplog.get_default_logger()
 
-# -------------------------------------------------------------------------
-
-class RemoteQueryCommand(Command):
-    def __init__(self, qname, query, hostname, port, dbname=None):
-        self.qname = qname
-        self.query = query
-        self.hostname = hostname
-        self.port = port
-        self.dbname = dbname or os.environ.get('PGDATABASE', None) or 'template1'
-        self.res = None
-
-    def get_results(self):
-        return self.res
-
-    def run(self):
-        logger.debug('Executing query (%s:%s) for segment (%s:%s) on database (%s)' % (
-            self.qname, self.query, self.hostname, self.port, self.dbname))
-        with closing(dbconn.connect(dbconn.DbURL(hostname=self.hostname, port=self.port, dbname=self.dbname),
-                            utility=True)) as conn:
-            self.res = dbconn.query(conn, self.query).fetchall()
 # -------------------------------------------------------------------------
 
 class GpRecoverSegmentProgram:

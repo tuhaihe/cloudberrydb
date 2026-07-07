@@ -24,7 +24,7 @@ Feature: gpinitsystem tests
         Then gpinitsystem should return a return code of 0
         And the user runs "psql postgres -c \"create table collationimport1 as select * from pg_collation where collnamespace = 'pg_catalog'::regnamespace\""
         # no more collation is imported
-        When the user runs "psql postgres -c \"select pg_import_system_collations($$pg_catalog$$)\""
+        When the user runs "psql postgres -c 'select pg_import_system_collations($$pg_catalog$$)'"
         Then psql should return a return code of 0
         And psql should print "0" to stdout
         And psql should print "(1 row)" to stdout

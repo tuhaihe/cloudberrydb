@@ -112,7 +112,7 @@ def step_impl(context):
     )
 
     if result_cursor.rowcount != context.current_cluster_size:
-        raise Exception("expected all %d primaries to have replication slots, only %d have slots" % (context.current_cluster_size, results.rowcount))
+        raise Exception("expected all %d primaries to have replication slots, only %d have slots" % (context.current_cluster_size, result_cursor.rowcount))
 
     for content_id, result in enumerate(result_cursor.fetchall()):
         pg_rep_slot = result[0]
