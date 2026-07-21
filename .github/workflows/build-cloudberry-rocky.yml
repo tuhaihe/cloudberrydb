@@ -464,7 +464,7 @@ jobs:
   ## ======================================================================
 
   build:
-    name: Build RPM (Rocky ${{ matrix.rocky_version }})
+    name: ${{ matrix.rocky_version == '9' && 'Build Apache Cloudberry RPM' || format('Build RPM (Rocky {0})', matrix.rocky_version) }}
     env:
       JOB_TYPE: build
     needs: [check-skip]
@@ -775,7 +775,7 @@ jobs:
   ## ======================================================================
 
   rpm-install-test:
-    name: RPM Install Test (Rocky ${{ matrix.rocky_version }})
+    name: ${{ matrix.rocky_version == '9' && 'RPM Install Test Apache Cloudberry' || format('RPM Install Test (Rocky {0})', matrix.rocky_version) }}
     needs: [check-skip, build]
     if: |
       !cancelled() &&
@@ -988,7 +988,7 @@ jobs:
   ## ======================================================================
 
   test:
-    name: ${{ matrix.test }} (Rocky ${{ matrix.rocky_version }})
+    name: ${{ matrix.rocky_version == '9' && matrix.test || format('{0} (Rocky {1})', matrix.test, matrix.rocky_version) }}
     needs: [check-skip, build, prepare-test-matrix]
     if: |
       !cancelled() &&
@@ -1958,7 +1958,7 @@ jobs:
   ## ======================================================================
 
   report:
-    name: Generate Build Report (Rocky Linux)
+    name: Generate Apache Cloudberry Build Report
     needs: [check-skip, build, prepare-test-matrix, rpm-install-test, test]
     if: always()
     runs-on: ubuntu-22.04
