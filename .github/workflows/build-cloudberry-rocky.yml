@@ -17,13 +17,14 @@
 # permissions and limitations under the License.
 #
 # --------------------------------------------------------------------
-# GitHub Actions Workflow: Apache Cloudberry Build Pipeline (Rocky 8)
+# GitHub Actions Workflow: Apache Cloudberry Build Pipeline (Rocky Linux)
 # --------------------------------------------------------------------
 # Description:
 #
 #   This workflow builds, tests, and packages Apache Cloudberry on
-#   Rocky Linux 8. It ensures artifact integrity, performs installation
-#   tests, validates key operations, and provides detailed test reports,
+#   Rocky Linux 8, 9, and 10 using a consolidated matrix strategy.
+#   It ensures artifact integrity, performs installation tests,
+#   validates key operations, and provides detailed test reports,
 #   including handling for ignored test cases.
 #
 # Workflow Overview:
@@ -39,19 +40,19 @@
 #    - **Example Usage**:
 #      - Add `[skip ci]` to a commit message, PR title, or body to skip the workflow.
 #
-# 2. **Build Job**:
-#    - Configures and builds Apache Cloudberry.
+# 2. **Build Job (Matrix: Rocky 8/9/10)**:
+#    - Configures and builds Apache Cloudberry for each Rocky version.
 #    - Supports debug build configuration via ENABLE_DEBUG flag.
 #    - Runs unit tests and verifies build artifacts.
 #    - Creates RPM packages (regular or debug), source tarballs, and logs.
 #    - **Key Artifacts**: RPM package, source tarball, build logs.
 #
-# 3. **RPM Install Test Job**:
+# 3. **RPM Install Test Job (Matrix: Rocky 8/9/10)**:
 #    - Verifies RPM integrity and installs Cloudberry.
 #    - Validates successful installation.
 #    - **Key Artifacts**: Installation logs, verification results.
 #
-# 4. **Test Job (Matrix)**:
+# 4. **Test Job (Matrix: Rocky 8/9/10 × Test Configurations)**:
 #    - Executes a test matrix to validate different scenarios.
 #    - Creates a demo cluster and runs installcheck tests.
 #    - Parses and reports test results, including failed and ignored tests.
@@ -67,21 +68,20 @@
 #    - Sends failure notifications if any step fails.
 #
 # Execution Environment:
-# - **Runs On**: ubuntu-22.04 with Rocky Linux 8 containers.
+# - **Runs On**: ubuntu-22.04 with Rocky Linux 8/9/10 containers.
 # - **Resource Requirements**:
 #   - Disk: Minimum 20GB free space.
 #   - Memory: Minimum 8GB RAM.
 #   - CPU: Recommended 4+ cores.
 #
 # Triggers:
-# - Push to `main` branch.
-# - Pull request that modifies this workflow file.
-# - Scheduled: Every Monday at 02:00 UTC.
+# - Push to `main` or `REL_2_STABLE` branch.
+# - Pull requests to `main` or `REL_2_STABLE` branch.
 # - Manual workflow dispatch.
 #
-# Container Images:
-# - **Build**: `apache/incubator-cloudberry:cbdb-build-rocky8-latest`
-# - **Test**: `apache/incubator-cloudberry:cbdb-test-rocky8-latest`
+# Container Images (per Rocky version):
+# - **Build**: `apache/incubator-cloudberry:cbdb-build-rocky{version}-latest`
+# - **Test**: `apache/incubator-cloudberry:cbdb-test-rocky{version}-latest`
 #
 # Artifacts:
 # - RPM Package          (retention: ${{ env.LOG_RETENTION_DAYS }} days).
@@ -91,30 +91,30 @@
 # - Core Dump Analyses    (retention: ${{ env.LOG_RETENTION_DAYS }} days).
 #
 # Notes:
-# - Supports concurrent job execution.
+# - Supports concurrent job execution across Rocky versions.
 # - Includes robust skip logic for pull requests and pushes.
 # - Handles ignored test cases, ensuring results are comprehensive.
 # - Provides detailed logs and error handling for failed and ignored tests.
 # - Analyzes core dumps generated during test execution.
 # - Supports debug builds with preserved symbols.
+# - All Rocky versions run the same set of tests for maximum coverage.
 # --------------------------------------------------------------------
 
-name: Apache Cloudberry Build (Rocky 8)
+name: Apache Cloudberry Build (Rocky Linux)
 
 on:
   push:
     branches: [main, REL_2_STABLE]
   pull_request:
-    paths:
-      - '.github/workflows/build-cloudberry-rocky8.yml'
-    # We can enable the PR test when needed
-    # branches: [main, REL_2_STABLE]
-    # types: [opened, synchronize, reopened, edited]
-  schedule:
-    # Run every Monday at 02:00 UTC
-    - cron: '0 2 * * 1'
+    branches: [main, REL_2_STABLE]
+    types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
     inputs:
+      rocky_version:
+        description: 'Rocky Linux version (default: all)'
+        required: false
+        default: 'all'
+        type: string
       test_selection:
         description: 'Select tests to run (comma-separated). Examples: ic-good-opt-off,ic-contrib'
         required: false
@@ -223,6 +223,7 @@ jobs:
         run: |
           echo "=== Matrix Preparation Diagnostics ==="
           echo "Event type: ${{ github.event_name }}"
+          echo "Rocky version input: '${{ github.event.inputs.rocky_version }}'"
           echo "Test selection input: '${{ github.event.inputs.test_selection }}'"
 
           # Define defaults
@@ -231,7 +232,7 @@ jobs:
           DEFAULT_ENABLE_CORE_CHECK=true
           DEFAULT_PG_SETTINGS_OPTIMIZER=""
 
-          # Define base test configurations
+          # Define base test configurations (union of all Rocky 8/9/10 tests)
           ALL_TESTS='{
             "include": [
               {"test":"ic-good-opt-off",
@@ -278,6 +279,15 @@ jobs:
                 },
                 "enable_core_check":false
               },
+              {"test":"gpcontrib-gp-stats-collector",
+               "make_configs":["gpcontrib/gp_stats_collector:installcheck"],
+               "extension":"gp_stats_collector"
+              },
+              {"test":"gpcontrib-gp-relsizes-stats",
+               "make_configs":["gpcontrib/gp_relsizes_stats:installcheck"],
+               "extension":"gp_relsizes_stats",
+               "shared_preload_libraries":"gp_relsizes_stats"
+              },
               {"test":"ic-expandshrink",
                "make_configs":["src/test/isolation2:installcheck-expandshrink"]
               },
@@ -305,6 +315,7 @@ jobs:
                                "contrib/formatter_fixedwidth:installcheck",
                                "contrib/hstore:installcheck",
                                "contrib/indexscan:installcheck",
+                               "contrib/interconnect:installcheck",
                                "contrib/pg_trgm:installcheck",
                                "contrib/indexscan:installcheck",
                                "contrib/pgcrypto:installcheck",
@@ -318,16 +329,13 @@ jobs:
                "make_configs":["gpcontrib/orafce:installcheck",
                                "gpcontrib/zstd:installcheck",
                                "gpcontrib/gp_sparse_vector:installcheck",
-                               "gpcontrib/gp_toolkit:installcheck"]
+                               "gpcontrib/gp_toolkit:installcheck",
+                               "gpcontrib/gp_exttable_fdw:installcheck",
+                               "gpcontrib/gp_internal_tools:installcheck"]
               },
-              {"test":"gpcontrib-gp-stats-collector",
-               "make_configs":["gpcontrib/gp_stats_collector:installcheck"],
-               "extension":"gp_stats_collector"
-              },
-              {"test":"gpcontrib-gp-relsizes-stats",
-               "make_configs":["gpcontrib/gp_relsizes_stats:installcheck"],
-               "extension":"gp_relsizes_stats",
-               "shared_preload_libraries":"gp_relsizes_stats"
+              {"test":"ic-diskquota",
+               "make_configs":["gpcontrib/diskquota:installcheck"],
+               "shared_preload_libraries":"diskquota-2.3"
               },
               {"test":"ic-fixme",
                "make_configs":["src/test/regress:installcheck-fixme"],
@@ -348,6 +356,9 @@ jobs:
               },
               {"test":"ic-cbdb-parallel",
                "make_configs":["src/test/regress:installcheck-cbdb-parallel"]
+              },
+              {"test":"ic-orca-parallel",
+               "make_configs":["src/test/regress:installcheck-orca-parallel"]
               },
               {"test":"ic-recovery",
                "make_configs":["src/test/recovery:installcheck"],
@@ -373,6 +384,15 @@ jobs:
                 };
                get_defaults * .'
           }
+
+          # Determine rocky versions
+          ROCKY_INPUT="${{ github.event.inputs.rocky_version }}"
+          if [[ "$ROCKY_INPUT" == "all" || -z "$ROCKY_INPUT" ]]; then
+            ROCKY_VERSIONS_JSON='["8","9","10"]'
+          else
+            ROCKY_VERSIONS_JSON=$(echo "$ROCKY_INPUT" | jq -R 'split(",") | map(.)')
+          fi
+          echo "Rocky versions: $ROCKY_VERSIONS_JSON"
 
           # Extract all valid test names from ALL_TESTS
           VALID_TESTS=$(echo "$ALL_TESTS" | jq -r '.include[].test')
@@ -419,14 +439,21 @@ jobs:
           done
           RESULT="${RESULT}]}"
 
+          # Expand by rocky versions: cross-join each test with each rocky version
+          FINAL_RESULT=$(jq -n \
+            --argjson tests "$RESULT" \
+            --argjson versions "$ROCKY_VERSIONS_JSON" \
+            '[ $tests.include[] as $t | $versions[] as $v | $t + {rocky_version: $v} ] | {include: .}')
+
           # Output the matrix for GitHub Actions
-          echo "Final matrix configuration:"
-          echo "$RESULT" | jq .
+          echo "Final matrix configuration (first 3 entries):"
+          echo "$FINAL_RESULT" | jq '.include[:3]'
+          echo "Total matrix entries: $(echo "$FINAL_RESULT" | jq '.include | length')"
 
           # Fix: Use block redirection
           {
             echo "matrix<<EOF"
-            echo "$RESULT"
+            echo "$FINAL_RESULT"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -437,18 +464,21 @@ jobs:
   ## ======================================================================
 
   build:
-    name: Build Apache Cloudberry RPM (Rocky 8)
+    name: Build RPM (Rocky ${{ matrix.rocky_version }})
     env:
       JOB_TYPE: build
     needs: [check-skip]
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     if: github.event.inputs.reuse_artifacts_from_run_id == ''
-    outputs:
-      build_timestamp: ${{ steps.set_timestamp.outputs.timestamp }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        rocky_version: [8, 9, 10]
 
     container:
-      image: apache/incubator-cloudberry:cbdb-build-rocky8-latest
+      image: apache/incubator-cloudberry:cbdb-build-rocky${{ matrix.rocky_version }}-latest
       options: >-
         --user root
         -h cdw
@@ -537,7 +567,7 @@ jobs:
         if: needs.check-skip.outputs.should_skip != 'true'
         run: |
           {
-            echo "# Build Job Summary"
+            echo "# Build Job Summary (Rocky ${{ matrix.rocky_version }})"
             echo "## Environment"
             echo "- Start Time: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
             echo "- ENABLE_DEBUG: ${{ env.ENABLE_DEBUG }}"
@@ -715,7 +745,7 @@ jobs:
         if: needs.check-skip.outputs.should_skip != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs-rocky8-${{ env.BUILD_TIMESTAMP }}
+          name: build-logs-rocky${{ matrix.rocky_version }}-${{ env.BUILD_TIMESTAMP }}
           path: |
             build-logs/
           retention-days: ${{ env.LOG_RETENTION_DAYS }}
@@ -724,7 +754,7 @@ jobs:
         if: needs.check-skip.outputs.should_skip != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: apache-cloudberry-db-incubating-rpm-build-artifacts-rocky8
+          name: apache-cloudberry-db-incubating-rpm-build-artifacts-rocky${{ matrix.rocky_version }}
           retention-days: ${{ env.LOG_RETENTION_DAYS }}
           if-no-files-found: error
           path: |
@@ -734,7 +764,7 @@ jobs:
         if: needs.check-skip.outputs.should_skip != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: apache-cloudberry-db-incubating-source-build-artifacts-rocky8
+          name: apache-cloudberry-db-incubating-source-build-artifacts-rocky${{ matrix.rocky_version }}
           retention-days: ${{ env.LOG_RETENTION_DAYS }}
           if-no-files-found: error
           path: |
@@ -745,7 +775,7 @@ jobs:
   ## ======================================================================
 
   rpm-install-test:
-    name: RPM Install Test Apache Cloudberry (Rocky 8)
+    name: RPM Install Test (Rocky ${{ matrix.rocky_version }})
     needs: [check-skip, build]
     if: |
       !cancelled() &&
@@ -754,8 +784,13 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 120
 
+    strategy:
+      fail-fast: false
+      matrix:
+        rocky_version: [8, 9, 10]
+
     container:
-      image: apache/incubator-cloudberry:cbdb-test-rocky8-latest
+      image: apache/incubator-cloudberry:cbdb-test-rocky${{ matrix.rocky_version }}-latest
       options: >-
         --user root
         -h cdw
@@ -796,7 +831,7 @@ jobs:
         if: needs.check-skip.outputs.should_skip != 'true'
         uses: actions/download-artifact@v4
         with:
-          name: apache-cloudberry-db-incubating-rpm-build-artifacts-rocky8
+          name: apache-cloudberry-db-incubating-rpm-build-artifacts-rocky${{ matrix.rocky_version }}
           path: ${{ github.workspace }}/rpm_build_artifacts
           merge-multiple: false
           run-id: ${{ github.event.inputs.reuse_artifacts_from_run_id || github.run_id }}
@@ -914,9 +949,9 @@ jobs:
             rm -rf /usr/local/cloudberry-db
 
             # Install RPM with retry logic for mirror issues
-            # Use --releasever=8 to pin to stable Rocky Linux 8 repos (not bleeding-edge 8.10)
+            # Use --releasever to pin to the correct Rocky Linux repo version
             echo "Starting installation..."
-            if ! time dnf install -y --setopt=retries=10 --releasever=8 "${RPM_FILE}"; then
+            if ! time dnf install -y --setopt=retries=10 --releasever=${{ matrix.rocky_version }} "${RPM_FILE}"; then
               echo "::error::RPM installation failed"
               exit 1
             fi
@@ -931,7 +966,7 @@ jobs:
         if: needs.check-skip.outputs.should_skip != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: install-logs-rocky8-${{ needs.build.outputs.build_timestamp }}
+          name: install-logs-rocky${{ matrix.rocky_version }}
           path: |
             install-logs/
           retention-days: ${{ env.LOG_RETENTION_DAYS }}
@@ -953,7 +988,7 @@ jobs:
   ## ======================================================================
 
   test:
-    name: ${{ matrix.test }} (Rocky 8)
+    name: ${{ matrix.test }} (Rocky ${{ matrix.rocky_version }})
     needs: [check-skip, build, prepare-test-matrix]
     if: |
       !cancelled() &&
@@ -966,7 +1001,7 @@ jobs:
       matrix: ${{ fromJson(needs.prepare-test-matrix.outputs.test-matrix) }}
 
     container:
-      image: apache/incubator-cloudberry:cbdb-build-rocky8-latest
+      image: apache/incubator-cloudberry:cbdb-build-rocky${{ matrix.rocky_version }}-latest
       options: >-
         --privileged
         --user root
@@ -1007,11 +1042,6 @@ jobs:
         run: |
           echo "Test ${{ matrix.test }} skipped via CI skip flag" >> "$GITHUB_STEP_SUMMARY"
           exit 0
-
-      - name: Use timestamp from previous job
-        if: needs.check-skip.outputs.should_skip != 'true'
-        run: |
-          echo "Timestamp from output: ${{ needs.build.outputs.build_timestamp }}"
 
       - name: Cloudberry Environment Initialization
         env:
@@ -1193,7 +1223,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "# Test Job Summary: ${{ matrix.test }} (Rocky 8)"
+            echo "# Test Job Summary: ${{ matrix.test }} (Rocky ${{ matrix.rocky_version }})"
             echo "## Environment"
             echo "- Start Time: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
 
@@ -1209,7 +1239,7 @@ jobs:
         if: needs.check-skip.outputs.should_skip != 'true'
         uses: actions/download-artifact@v4
         with:
-          name: apache-cloudberry-db-incubating-rpm-build-artifacts-rocky8
+          name: apache-cloudberry-db-incubating-rpm-build-artifacts-rocky${{ matrix.rocky_version }}
           path: ${{ github.workspace }}/rpm_build_artifacts
           merge-multiple: false
           run-id: ${{ github.event.inputs.reuse_artifacts_from_run_id || github.run_id }}
@@ -1219,7 +1249,7 @@ jobs:
         if: needs.check-skip.outputs.should_skip != 'true'
         uses: actions/download-artifact@v4
         with:
-          name: apache-cloudberry-db-incubating-source-build-artifacts-rocky8
+          name: apache-cloudberry-db-incubating-source-build-artifacts-rocky${{ matrix.rocky_version }}
           path: ${{ github.workspace }}/source_build_artifacts
           merge-multiple: false
           run-id: ${{ github.event.inputs.reuse_artifacts_from_run_id || github.run_id }}
@@ -1324,9 +1354,9 @@ jobs:
             rm -rf /usr/local/cloudberry-db
 
             # Install RPM with retry logic for mirror issues
-            # Use --releasever=8 to pin to stable Rocky Linux 8 repos (not bleeding-edge 8.10)
+            # Use --releasever to pin to the correct Rocky Linux repo version
             echo "Starting installation..."
-            if ! time dnf install -y --setopt=retries=10 --releasever=8 "${RPM_FILE}"; then
+            if ! time dnf install -y --setopt=retries=10 --releasever=${{ matrix.rocky_version }} "${RPM_FILE}"; then
               echo "::error::RPM installation failed"
               exit 1
             fi
@@ -1401,7 +1431,15 @@ jobs:
 
           {
             chmod +x "${SRC_DIR}"/devops/build/automation/cloudberry/scripts/create-cloudberry-demo-cluster.sh
-            if ! time su - gpadmin -c "cd ${SRC_DIR} && NUM_PRIMARY_MIRROR_PAIRS='${{ matrix.num_primary_mirror_pairs }}' SRC_DIR=${SRC_DIR} ${SRC_DIR}/devops/build/automation/cloudberry/scripts/create-cloudberry-demo-cluster.sh"; then
+
+            # Build BLDWRAP_POSTGRES_CONF_ADDONS for shared_preload_libraries if specified
+            EXTRA_CONF=""
+            if [[ -n "${{ matrix.shared_preload_libraries }}" ]]; then
+              EXTRA_CONF="shared_preload_libraries='${{ matrix.shared_preload_libraries }}'"
+              echo "Adding shared_preload_libraries: ${{ matrix.shared_preload_libraries }}"
+            fi
+
+            if ! time su - gpadmin -c "cd ${SRC_DIR} && NUM_PRIMARY_MIRROR_PAIRS='${{ matrix.num_primary_mirror_pairs }}' BLDWRAP_POSTGRES_CONF_ADDONS=\"${EXTRA_CONF}\" SRC_DIR=${SRC_DIR} ${SRC_DIR}/devops/build/automation/cloudberry/scripts/create-cloudberry-demo-cluster.sh"; then
               echo "::error::Demo cluster creation failed"
               exit 1
             fi
@@ -1440,6 +1478,12 @@ jobs:
           # 2. Follow the same pattern as optimizer
           # 3. Update matrix entries to include the new setting
 
+          # Set PostgreSQL options if defined
+          PG_OPTS=""
+          if [[ "${{ matrix.pg_settings.optimizer != '' }}" == "true" ]]; then
+            PG_OPTS="$PG_OPTS -c optimizer=${{ matrix.pg_settings.optimizer }}"
+          fi
+
           # Create extension if required
           if [[ "${{ matrix.extension != '' }}" == "true" ]]; then
             case "${{ matrix.extension }}" in
@@ -1476,12 +1520,6 @@ jobs:
                 exit 1
                 ;;
             esac
-          fi
-
-          # Set PostgreSQL options if defined
-          PG_OPTS=""
-          if [[ "${{ matrix.pg_settings.optimizer != '' }}" == "true" ]]; then
-            PG_OPTS="$PG_OPTS -c optimizer=${{ matrix.pg_settings.optimizer }}"
           fi
 
           if [[ "${{ matrix.pg_settings.default_table_access_method != '' }}" == "true" ]]; then
@@ -1872,7 +1910,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-logs-${{ matrix.test }}-rocky8-${{ needs.build.outputs.build_timestamp }}
+          name: test-logs-${{ matrix.test }}-rocky${{ matrix.rocky_version }}
           path: |
             build-logs/
           retention-days: ${{ env.LOG_RETENTION_DAYS }}
@@ -1881,7 +1919,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-metadata-${{ matrix.test }}-rocky8
+          name: test-metadata-${{ matrix.test }}-rocky${{ matrix.rocky_version }}
           path: |
             test_results*.txt
           retention-days: ${{ env.LOG_RETENTION_DAYS }}
@@ -1889,7 +1927,7 @@ jobs:
       - name: Upload test results files
         uses: actions/upload-artifact@v4
         with:
-          name: results-${{ matrix.test }}-rocky8-${{ needs.build.outputs.build_timestamp }}
+          name: results-${{ matrix.test }}-rocky${{ matrix.rocky_version }}
           path: |
             **/regression.out
             **/regression.diffs
@@ -1900,7 +1938,7 @@ jobs:
         if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: regression-logs-${{ matrix.test }}-rocky8-${{ needs.build.outputs.build_timestamp }}
+          name: regression-logs-${{ matrix.test }}-rocky${{ matrix.rocky_version }}
           path: |
             **/regression.out
             **/regression.diffs
@@ -1920,7 +1958,7 @@ jobs:
   ## ======================================================================
 
   report:
-    name: Generate Apache Cloudberry Build Report (Rocky 8)
+    name: Generate Build Report (Rocky Linux)
     needs: [check-skip, build, prepare-test-matrix, rpm-install-test, test]
     if: always()
     runs-on: ubuntu-22.04
@@ -1928,7 +1966,7 @@ jobs:
       - name: Generate Final Report
         run: |
           {
-            echo "# Apache Cloudberry Build Pipeline Report (Rocky 8)"
+            echo "# Apache Cloudberry Build Pipeline Report (Rocky Linux)"
 
             if [[ "${{ needs.check-skip.outputs.should_skip }}" == "true" ]]; then
               echo "## CI Skip Status"
