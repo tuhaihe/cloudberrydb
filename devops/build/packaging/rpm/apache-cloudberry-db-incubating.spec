@@ -26,8 +26,8 @@
 
 # Major version, used to build a versioned package Name so that different
 # major versions can be installed side by side (like greenplum-db-6 vs
-# greenplum-db-7). Derived from %{version} by default (single source of
-# truth), but can be overridden via --define 'cloudberry_major_version N'.
+# greenplum-db-7). Derived from the version macro by default (single source
+# of truth), but can be overridden via --define 'cloudberry_major_version N'.
 %{!?cloudberry_major_version:%define cloudberry_major_version %(echo %{version} | cut -d. -f1)}
 
 # Suppress build-id links so they are not created outside the relocatable prefix.
