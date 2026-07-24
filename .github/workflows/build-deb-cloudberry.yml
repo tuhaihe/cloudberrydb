@@ -290,7 +290,7 @@ jobs:
           if [[ "$UBUNTU_INPUT" == "all" || -z "$UBUNTU_INPUT" ]]; then
             UBUNTU_VERSIONS_JSON='["22.04","24.04"]'
           else
-            UBUNTU_VERSIONS_JSON=$(echo "$UBUNTU_INPUT" | jq -R 'split(",") | map(.)')
+            UBUNTU_VERSIONS_JSON=$(echo "$UBUNTU_INPUT" | jq -R 'split(",") | map(gsub("\\s+";"")) | map(select(length > 0)) | unique')
           fi
           echo "Ubuntu versions: $UBUNTU_VERSIONS_JSON"
 
@@ -568,7 +568,7 @@ jobs:
             echo "=== Artifact Creation Log ==="
             echo "Timestamp: $(date -u)"
 
-            cp -r "${SRC_DIR}"/devops/build/packaging/deb/ubuntu22.04/* debian/
+            cp -r "${SRC_DIR}"/devops/build/packaging/deb/ubuntu${{ matrix.ubuntu_version }}/* debian/
             chown -R "$(whoami)" debian
             chmod -x debian/*install
 
