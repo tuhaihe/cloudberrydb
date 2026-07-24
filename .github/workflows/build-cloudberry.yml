@@ -390,7 +390,14 @@ jobs:
           if [[ "$ROCKY_INPUT" == "all" || -z "$ROCKY_INPUT" ]]; then
             ROCKY_VERSIONS_JSON='["8","9","10"]'
           else
-            ROCKY_VERSIONS_JSON=$(echo "$ROCKY_INPUT" | jq -R 'split(",") | map(.)')
+            ROCKY_VERSIONS_JSON=$(echo "$ROCKY_INPUT" | jq -R 'split(",") | map(gsub("\\s+";"")) | map(select(length > 0)) | unique')
+            # Validate rocky versions
+            VALID_VERSIONS='["8","9","10"]'
+            INVALID_VERSIONS=$(echo "$ROCKY_VERSIONS_JSON" | jq -r --argjson valid "$VALID_VERSIONS" '[.[] | select(. as $v | $valid | index($v) | not)] | join(",")')
+            if [[ -n "$INVALID_VERSIONS" ]]; then
+              echo "::error::Invalid Rocky version(s): $INVALID_VERSIONS (valid: 8,9,10)"
+              exit 1
+            fi
           fi
           echo "Rocky versions: $ROCKY_VERSIONS_JSON"
 
@@ -475,7 +482,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rocky_version: [8, 9, 10]
+        rocky_version: ['8', '9', '10']
 
     container:
       image: apache/incubator-cloudberry:cbdb-build-rocky${{ matrix.rocky_version }}-latest
@@ -787,7 +794,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rocky_version: [8, 9, 10]
+        rocky_version: ['8', '9', '10']
 
     container:
       image: apache/incubator-cloudberry:cbdb-test-rocky${{ matrix.rocky_version }}-latest
