@@ -208,10 +208,11 @@ INSTALL_BASE="${INSTALL_PREFIX%/}"
 
 LINK_PATH="${INSTALL_BASE}/%{cloudberry_name}"
 VERSIONED_DIR="${INSTALL_BASE}/%{cloudberry_name}-%{version}"
+LINK_TARGET_REL="%{cloudberry_name}-%{version}"
 
 if [ ! -e "${LINK_PATH}" ] && [ ! -L "${LINK_PATH}" ]; then
     # Nothing at the symlink location yet — create it.
-    ln -s "${VERSIONED_DIR}" "${LINK_PATH}" || :
+    ln -s "${LINK_TARGET_REL}" "${LINK_PATH}" || :
 elif [ -L "${LINK_PATH}" ]; then
     # A symlink already exists. Update it when it points to a
     # recognized Cloudberry versioned directory.
@@ -224,7 +225,7 @@ elif [ -L "${LINK_PATH}" ]; then
             EXISTING_MAJOR=${EXISTING_VERSION%%.*}
             if [ "${EXISTING_MAJOR}" = "%{cloudberry_major_version}" ]; then
                 # Same major version: move the generic symlink to this build.
-                ln -sfnT "${VERSIONED_DIR}" "${LINK_PATH}" || :
+                ln -sfnT "${LINK_TARGET_REL}" "${LINK_PATH}" || :
             else
                 # Different major version: leave the existing symlink untouched
                 # so that multiple major versions can coexist under one prefix.
