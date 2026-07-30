@@ -1540,7 +1540,7 @@ ExplainNode(PlanState *planstate, List *ancestors,
 			const char *relationship, const char *plan_name,
 			ExplainState *es)
 {
-	Plan	   *plan = planstate->plan;
+	Plan	   *plan;
 	PlanState  *parentplanstate;
 	ExecSlice  *save_currentSlice = es->currentSlice;    /* save */
 	const char *pname;			/* node type name for text output */
@@ -1557,6 +1557,13 @@ ExplainNode(PlanState *planstate, List *ancestors,
 	int			motion_recv;
 	int			motion_snd;
 	ExecSlice  *parentSlice = NULL;
+	/*
+	 * Guard against the case where a subtree on the QE lives in another slice
+	 * and is not instantiated in this slice.
+	 */
+	if (planstate == NULL)
+		return;
+	plan = planstate->plan;
 
 	/* Remember who called us. */
 	parentplanstate = es->parentPlanState;
@@ -2945,8 +2952,11 @@ ExplainNode(PlanState *planstate, List *ancestors,
 	/* lefttree */
 	if (outerPlan(plan) && !skip_outer)
 	{
-		ExplainNode(outerPlanState(planstate), ancestors,
-					"Outer", NULL, es);
+		if (outerPlanState(planstate))
+		{
+			ExplainNode(outerPlanState(planstate), ancestors, 
+						"Outer", NULL, es);
+		}
 	}
     else if (skip_outer)
     {
