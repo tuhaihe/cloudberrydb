@@ -67,14 +67,14 @@ jobs:
 
     steps:
       - name: Checkout Cloudberry source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: apache/cloudberry
           path: cloudberry
           submodules: true
 
       - name: Checkout Yproxy source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: open-gpdb/yproxy
           ref: master
@@ -207,7 +207,7 @@ jobs:
 
       - name: Upload MinIO logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: minio-logs-${{ matrix.os }}
           path: minio-logs/
@@ -336,7 +336,7 @@ jobs:
 
       - name: Upload matrix job result
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: matrix-result-${{ matrix.os }}
           path: matrix-results/result-${{ matrix.os }}.txt
@@ -344,7 +344,7 @@ jobs:
 
       - name: Upload test logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-logs-cloudberry-${{ matrix.os }}
           path: |
@@ -353,7 +353,7 @@ jobs:
 
       - name: Upload test results files
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: results-cloudberry-${{ matrix.os }}
           path: |
@@ -364,7 +364,7 @@ jobs:
 
       - name: Upload test regression logs
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: regression-logs-cloudberry-${{ matrix.os }}
           path: |
@@ -393,7 +393,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Download matrix job results
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: matrix-result-*
           merge-multiple: true
