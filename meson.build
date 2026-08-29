@@ -3264,6 +3264,7 @@ subdir('src')
 
 subdir('contrib')
 subdir('gpcontrib')
+subdir('gpMgmt')
 
 subdir('src/test')
 # ecpg is not built by Cloudberry; see src/interfaces/meson.build
