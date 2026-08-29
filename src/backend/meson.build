@@ -33,6 +33,10 @@ subdir('storage')
 subdir('tcop')
 subdir('tsearch')
 subdir('utils')
+subdir('task')
+subdir('crypto')
+subdir('fts')
+subdir('cdb')
 
 subdir('po', if_found: libintl)
 
@@ -207,7 +211,6 @@ pg_test_mod_args = pg_mod_args + {
 # enter these after we defined the server build.
 
 subdir('jit/llvm')
-subdir('replication/libpqwalreceiver')
 subdir('replication/pgoutput')
 subdir('snowball')
 subdir('utils/mb/conversion_procs')

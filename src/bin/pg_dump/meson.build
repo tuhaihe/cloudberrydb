@@ -15,6 +15,7 @@ pg_dump_common_sources = files(
   'pg_backup_null.c',
   'pg_backup_tar.c',
   'pg_backup_utils.c',
+  'dumputils_gp.c',
 )
 
 pg_dump_common = static_library('libpgdump_common',
