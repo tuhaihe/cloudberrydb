@@ -789,6 +789,48 @@ endif
 
 
 ###############################################################
+# Language: C++ (ORCA, and the LLVM JIT below)
+###############################################################
+
+# Cloudberry's ORCA optimizer is C++, so the C++ compiler has to be available
+# whenever ORCA is built. Upstream only enables C++ for the LLVM JIT, which is
+# why this has to happen before the LLVM block. add_languages() is idempotent,
+# so LLVM's own call below still works.
+orcaopt = get_option('orca')
+have_cpp = add_languages('cpp', required: orcaopt, native: false)
+
+# Xerces-C, ORCA's only external dependency.
+#
+# configure.ac only does AC_CHECK_LIB(xerces-c, strnicmp) -- a C-mode link
+# probe with no include path, no version floor and no check for the Cloudberry
+# patch that cmake/FindXerces.cmake says is required. Probe properly here, and
+# scope the dependency to the ORCA targets instead of leaking -lxerces-c into
+# the global LIBS the way configure does.
+xerces = not_found_dep
+if not orcaopt.disabled()
+  if not have_cpp
+    if orcaopt.enabled()
+      error('ORCA requires a C++ compiler')
+    endif
+  else
+    cpp = meson.get_compiler('cpp')
+    # Honour --with-libraries / --with-includes equivalents so xerces can live
+    # outside the default search path (as it does in the CI image).
+    xerces_probe_args = []
+    foreach d : get_option('extra_include_dirs')
+      xerces_probe_args += '-I' + d
+    endforeach
+    xerces_lib = cpp.find_library('xerces-c', dirs: postgres_lib_d, required: orcaopt)
+    if xerces_lib.found() and cpp.has_header('xercesc/sax2/DefaultHandler.hpp',
+        dependencies: xerces_lib, args: xerces_probe_args)
+      xerces = xerces_lib
+    elif orcaopt.enabled()
+      error('ORCA requires xerces-c (library and headers)')
+    endif
+  endif
+endif
+
+###############################################################
 # Library: LLVM
 ###############################################################
 
@@ -2971,9 +3013,9 @@ cdata.set_quoted('GP_VERSION', gp_version_long)
 cdata.set_quoted('GP_MAJORVERSION', gp_majorversion)
 cdata.set('GP_VERSION_NUM', gp_version_num)
 
-# ORCA optimizer
-orcaopt = get_option('orca')
-if orcaopt.enabled()
+# ORCA optimizer (orcaopt / xerces are resolved near the top of this file,
+# because enabling C++ has to happen before any C++ target is defined)
+if xerces.found()
   cdata.set('USE_ORCA', 1)
   # GPOS_DEBUG is ABI-affecting: it is tested by ~475 files under
   # src/backend/gporca and changes class layouts. It must be a single value

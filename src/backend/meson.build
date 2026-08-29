@@ -38,6 +38,12 @@ subdir('crypto')
 subdir('fts')
 subdir('cdb')
 
+# ifeq ($(enable_orca),yes) / SUBDIRS += gporca gpopt
+if xerces.found()
+  subdir('gporca')
+  subdir('gpopt')
+endif
+
 subdir('po', if_found: libintl)
 
 
@@ -144,12 +150,18 @@ if host_system == 'windows'
     '--FILEDESC', 'PostgreSQL Server',])
 endif
 
+# src/backend/Makefile links postgres with $(CXX) because ORCA is C++.
+# meson picks the linker from the target's own sources, which are all C, so
+# the C++ linker has to be requested explicitly when ORCA is linked in.
+postgres_link_language = xerces.found() ? 'cpp' : 'c'
+
 postgres = executable('postgres',
   backend_input,
   sources: post_export_backend_sources,
   objects: backend_objs,
   link_args: backend_link_args,
   link_with: backend_link_with,
+  link_language: postgres_link_language,
   link_depends: backend_link_depends,
   export_dynamic: true,
   implib: true,
