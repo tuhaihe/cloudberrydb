@@ -3068,6 +3068,40 @@ else
   cdata.set('USE_CURL', false)
 endif
 
+# gpfdist dependencies: apr-1 and libevent are required, libyaml is optional
+# and only gates the transform support (-DGPFXDIST).
+# configure.ac: PKG_CHECK_MODULES([EVENT], [libevent >= 2.0.0]) and
+#               AC_SEARCH_LIBS(yaml_parser_initialize, [yaml])
+gpfdistopt = get_option('gpfdist')
+apr = not_found_dep
+apr_link_ld_libs = ''
+libevent = not_found_dep
+if not gpfdistopt.disabled()
+  # configure.ac locates apr through apr-1-config (--with-apr-config), not
+  # pkg-config -- on some platforms the system apr-1.pc points at an include
+  # directory that does not exist. Follow the same route, falling back to
+  # pkg-config only if the config tool is unavailable.
+  apr_config = find_program(get_option('apr_config'), required: false, native: true)
+  if apr_config.found()
+    apr_inc_args = run_command(apr_config, '--includes', check: true).stdout().split()
+    apr_link_ld_libs = run_command(apr_config, '--link-ld', check: true).stdout().strip()
+    apr = declare_dependency(
+      compile_args: apr_inc_args,
+      link_args: apr_link_ld_libs.split(),
+    )
+  else
+    apr = dependency('apr-1', required: gpfdistopt)
+  endif
+  libevent = dependency('libevent', version: '>= 2.0.0', required: gpfdistopt)
+endif
+
+# libyaml is optional for gpfdist but required for gpmapreduce.
+mapreduceopt = get_option('mapreduce')
+libyaml = not_found_dep
+if not gpfdistopt.disabled() or mapreduceopt.enabled()
+  libyaml = dependency('yaml-0.1', required: mapreduceopt.enabled())
+endif
+
 # bzip2: configure.ac does AC_CHECK_LIB(bz2, BZ2_bzDecompress) into global LIBS
 libbz2opt = get_option('libbz2')
 if not libbz2opt.disabled()

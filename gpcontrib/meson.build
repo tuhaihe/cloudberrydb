@@ -26,3 +26,26 @@ subdir('gp_relsizes_stats')
 subdir('gp_sparse_vector')
 subdir('gp_toolkit')
 subdir('pg_hint_plan')
+
+# --enable-pxf (default yes); requires libcurl
+if get_option('pxf').enabled()
+  subdir('pxf_fdw')
+endif
+
+# --enable-debug-extensions (default yes)
+if get_option('debug_extensions')
+  subdir('gp_debug_numsegments')
+  subdir('gp_inject_fault')
+  subdir('gp_replica_check')
+  subdir('reject_partition_fullscan')
+endif
+
+# --with-zstd
+if zstd.found()
+  subdir('zstd')
+endif
+
+# --enable-orafce
+if get_option('orafce').enabled()
+  subdir('orafce')
+endif

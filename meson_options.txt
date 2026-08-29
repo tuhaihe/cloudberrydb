@@ -287,3 +287,6 @@ option('shared_postgres_backend', type: 'boolean', value: true,
 
 option('link_postgres_with_shared', type: 'boolean', value: false,
   description: 'link the postgres binary against libpostgres.so')
+
+option('apr_config', type: 'string', value: 'apr-1-config',
+  description: 'path to the apr-1-config utility (--with-apr-config)')
