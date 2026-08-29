@@ -2934,6 +2934,120 @@ generated_sources_ac = {}
 # within. That makes it easy to add the necessary dependencies for the
 # subsequent build steps.
 
+
+###############################################################
+# Apache Cloudberry configuration
+###############################################################
+
+# Version.
+#
+# configure.ac runs `bash ./getversion` and then writes the result into a
+# VERSION file *in the source tree*. meson must never write into srcdir, so we
+# compute the value here and keep it in memory instead. getversion pushd's to
+# its own directory, so it is safe to invoke from any working directory.
+bash = find_program('bash', native: true)
+
+gp_version_long = run_command('bash', meson.current_source_dir() / 'getversion',
+  check: true).stdout().strip()
+gp_version_short = run_command('bash', meson.current_source_dir() / 'getversion',
+  '--short', check: true).stdout().strip()
+
+# GP_MAJORVERSION is the leading run of digits, matching configure.ac's
+#   expr "$GP_VERSION" : '\([0-9][0-9]*\)'
+gp_majorversion = gp_version_short.split('.')[0]
+
+# GP_VERSION_NUM packs major/minor/patch as %d%02d%02d, matching configure.ac.
+# Strip the '+dev.N.gHASH' and '-devel' suffixes first.
+gp_version_parts = gp_version_short.split('+')[0].split('-')[0].split('.')
+gp_version_num = gp_version_parts[0].to_int() * 10000
+if gp_version_parts.length() > 1
+  gp_version_num += gp_version_parts[1].to_int() * 100
+endif
+if gp_version_parts.length() > 2
+  gp_version_num += gp_version_parts[2].to_int()
+endif
+
+cdata.set_quoted('GP_VERSION', gp_version_long)
+cdata.set_quoted('GP_MAJORVERSION', gp_majorversion)
+cdata.set('GP_VERSION_NUM', gp_version_num)
+
+# ORCA optimizer
+orcaopt = get_option('orca')
+if orcaopt.enabled()
+  cdata.set('USE_ORCA', 1)
+  # GPOS_DEBUG is ABI-affecting: it is tested by ~475 files under
+  # src/backend/gporca and changes class layouts. It must be a single value
+  # shared by the whole build, exactly as configure.ac ties it to cassert.
+  if get_option('cassert')
+    cdata.set('GPOS_DEBUG', 1)
+  endif
+endif
+if host_machine.system() == 'darwin'
+  cdata.set('GPOS_Darwin', 1)
+endif
+
+# Fault tolerance service: internal unless an external FTS is requested.
+if not get_option('external_fts')
+  cdata.set('USE_INTERNAL_FTS', 1)
+endif
+
+# Simple boolean-driven defines.
+cdata.set('FAULT_INJECTOR', get_option('faultinjector') ? 1 : false)
+cdata.set('SERVERLESS', get_option('serverless') ? 1 : false)
+cdata.set('USE_CATALOG_EXT', get_option('catalog_ext') ? 1 : false)
+cdata.set('ENABLE_IC_UDP2', get_option('ic_udp2') ? 1 : false)
+cdata.set('ENABLE_PRELOAD_IC_MODULE', get_option('preload_ic_module') ? 1 : false)
+cdata.set('OPENSSL_ALLOW_REDIRECT', get_option('openssl_redirect') ? 1 : false)
+cdata.set('USE_SHARED_POSTGRES_BACKEND', get_option('shared_postgres_backend') ? 1 : false)
+cdata.set('USE_LINK_POSTGRES_WITH_SHARED', get_option('link_postgres_with_shared') ? 1 : false)
+
+# Feature-driven defines.
+# interconnect proxy mode requires libuv (configure.ac: AC_CHECK_LIB(uv, ...))
+icproxyopt = get_option('ic_proxy')
+if icproxyopt.enabled()
+  libuv = dependency('libuv', required: icproxyopt)
+  cdata.set('ENABLE_IC_PROXY', libuv.found() ? 1 : false)
+  cdata.set('HAVE_LIBUV', libuv.found() ? 1 : false)
+else
+  libuv = not_found_dep
+  cdata.set('ENABLE_IC_PROXY', false)
+endif
+cdata.set('USE_PAX_STORAGE', get_option('pax').enabled() ? 1 : false)
+cdata.set('USE_GPCLOUD', get_option('gpcloud').enabled() ? 1 : false)
+cdata.set('USE_MAPREDUCE', get_option('mapreduce').enabled() ? 1 : false)
+# libcurl: used by external tables (url_curl.c), PXF and gpcloud.
+# configure.ac: AC_CHECK_CURL([7.19.0]) then LIBS += $CURL_LIBS
+libcurlopt = get_option('libcurl')
+if not libcurlopt.disabled()
+  libcurl = dependency('libcurl', version: '>= 7.19.0', required: libcurlopt)
+  cdata.set('USE_CURL', libcurl.found() ? 1 : false)
+else
+  libcurl = not_found_dep
+  cdata.set('USE_CURL', false)
+endif
+
+# bzip2: configure.ac does AC_CHECK_LIB(bz2, BZ2_bzDecompress) into global LIBS
+libbz2opt = get_option('libbz2')
+if not libbz2opt.disabled()
+  libbz2 = cc.find_library('bz2', has_headers: ['bzlib.h'], required: libbz2opt)
+  cdata.set('HAVE_LIBBZ2', libbz2.found() ? 1 : false)
+else
+  libbz2 = not_found_dep
+  cdata.set('HAVE_LIBBZ2', false)
+endif
+cdata.set('USE_MDBLOCALES', get_option('mdblocales').enabled() ? 1 : false)
+
+# --enable-link-postgres-with-shared requires --enable-shared-postgres-backend
+if get_option('link_postgres_with_shared') and not get_option('shared_postgres_backend')
+  error('link_postgres_with_shared requires shared_postgres_backend')
+endif
+
+# PAX requires the shared backend
+if get_option('pax').enabled() and not get_option('shared_postgres_backend')
+  error('pax requires shared_postgres_backend')
+endif
+
+
 subdir('src/include')
 
 subdir('config')
@@ -2959,7 +3073,7 @@ frontend_common_code = declare_dependency(
   compile_args: ['-DFRONTEND'],
   include_directories: [postgres_inc],
   sources: generated_headers,
-  dependencies: [os_deps, zlib, zstd],
+  dependencies: [os_deps, zlib, zstd, ssl],
 )
 
 backend_common_code = declare_dependency(
@@ -2981,7 +3095,7 @@ frontend_stlib_code = declare_dependency(
   include_directories: [postgres_inc],
   link_with: [common_static, pgport_static],
   sources: generated_headers,
-  dependencies: [os_deps, libintl],
+  dependencies: [os_deps, libintl, ssl],
 )
 
 # all shared libraries not part of the backend should depend on this
@@ -3021,10 +3135,12 @@ frontend_code = declare_dependency(
   include_directories: [postgres_inc],
   link_with: [fe_utils, common_static, pgport_static],
   sources: generated_headers,
-  dependencies: [os_deps, libintl],
+  dependencies: [os_deps, libintl, ssl],
 )
 
 backend_both_deps += [
+  libcurl,
+  libbz2,
   thread_dep,
   bsd_auth,
   gssapi,
@@ -3043,9 +3159,13 @@ backend_both_deps += [
 
 backend_mod_deps = backend_both_deps + os_deps
 
+# Cloudberry's backend uses libpq directly for QD<->QE communication: 21
+# directories under src/backend add -I$(libpq_srcdir) in their Makefiles
+# (upstream needs it only for libpqwalreceiver). Since meson compiles the
+# backend as one target, the include path is added globally here.
 backend_code = declare_dependency(
   compile_args: ['-DBUILDING_DLL'],
-  include_directories: [postgres_inc],
+  include_directories: [postgres_inc, libpq_inc],
   link_args: ldflags_be,
   link_with: [],
   sources: generated_headers + generated_backend_headers,
@@ -3067,9 +3187,10 @@ test_install_libs = []
 subdir('src')
 
 subdir('contrib')
+subdir('gpcontrib')
 
 subdir('src/test')
-subdir('src/interfaces/ecpg/test')
+# ecpg is not built by Cloudberry; see src/interfaces/meson.build
 
 subdir('doc/src/sgml')
 
