@@ -25,3 +25,6 @@ subdir('scripts')
 if get_option('gpfdist').enabled()
   subdir('gpfdist')
 endif
+subdir('gpfts')
+subdir('gpnetbench')
+subdir('pg_alterckey')
