@@ -49,3 +49,23 @@ endif
 if get_option('orafce').enabled()
   subdir('orafce')
 endif
+
+# --enable-mapreduce; requires libyaml and perl
+if get_option('mapreduce').enabled()
+  subdir('gpmapreduce')
+endif
+
+# --with-gp-stats-collector; requires protobuf and protoc
+if get_option('gp_stats_collector').enabled()
+  subdir('gp_stats_collector')
+endif
+
+# --enable-gpcloud; requires libcurl, libxml2, openssl
+if get_option('gpcloud').enabled()
+  subdir('gpcloud')
+endif
+
+# --with-diskquota
+if get_option('diskquota').enabled()
+  subdir('diskquota')
+endif

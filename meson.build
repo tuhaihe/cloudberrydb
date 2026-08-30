@@ -796,8 +796,14 @@ endif
 # whenever ORCA is built. Upstream only enables C++ for the LLVM JIT, which is
 # why this has to happen before the LLVM block. add_languages() is idempotent,
 # so LLVM's own call below still works.
+# ORCA is the biggest C++ consumer, but gp_stats_collector, gpcloud and PAX
+# are C++ too, so any of them being enabled requires the compiler.
 orcaopt = get_option('orca')
-have_cpp = add_languages('cpp', required: orcaopt, native: false)
+cpp_needed = not orcaopt.disabled() \
+  or get_option('gp_stats_collector').enabled() \
+  or get_option('gpcloud').enabled() \
+  or get_option('pax').enabled()
+have_cpp = add_languages('cpp', required: cpp_needed, native: false)
 
 # Xerces-C, ORCA's only external dependency.
 #
@@ -3100,6 +3106,17 @@ mapreduceopt = get_option('mapreduce')
 libyaml = not_found_dep
 if not gpfdistopt.disabled() or mapreduceopt.enabled()
   libyaml = dependency('yaml-0.1', required: mapreduceopt.enabled())
+endif
+
+# protobuf: required by gp_stats_collector (>= 3.0.0) and by PAX (>= 3.5.0).
+# configure.ac uses PKG_CHECK_MODULES([PROTOBUF], ...) plus the protoc binary.
+gpscopt = get_option('gp_stats_collector')
+protobuf = not_found_dep
+protoc = disabler()
+if gpscopt.enabled() or get_option('pax').enabled()
+  protobuf_min = get_option('pax').enabled() ? '>= 3.5.0' : '>= 3.0.0'
+  protobuf = dependency('protobuf', version: protobuf_min, required: true)
+  protoc = find_program('protoc', required: true, native: true)
 endif
 
 # bzip2: configure.ac does AC_CHECK_LIB(bz2, BZ2_bzDecompress) into global LIBS
