@@ -36,7 +36,8 @@ fail() { echo "::error::$*" >&2; exit 1; }
 # 1. Installed artifacts
 # --------------------------------------------------------------------
 echo "== checking installed binaries =="
-for b in postgres initdb pg_ctl psql pg_dump pg_upgrade gpfdist; do
+for b in postgres initdb pg_ctl psql pg_dump pg_upgrade gpfdist gpfts \
+         gpmapreduce gpcheckcloud pg_alterckey; do
   [ -x "${PREFIX}/bin/${b}" ] || fail "missing bin/${b}"
   echo "  ok  bin/${b}"
 done
@@ -46,6 +47,11 @@ for e in interconnect gp_exttable_fdw gp_toolkit gp_distribution_policy pxf_fdw;
   [ -f "${PREFIX}/share/postgresql/extension/${e}.control" ] || fail "missing extension ${e}"
   echo "  ok  ${e}"
 done
+
+echo "== checking PAX =="
+[ -f "${PREFIX}/share/postgresql/cdb_init.d/pax-cdbinit--1.0.sql" ] \
+  || fail "missing generated pax-cdbinit--1.0.sql"
+echo "  ok  pax-cdbinit--1.0.sql"
 
 echo "== checking generated catalog data =="
 for f in system_views_gp.sql cdb_init.d/cdb_schema.sql postgres.bki; do
