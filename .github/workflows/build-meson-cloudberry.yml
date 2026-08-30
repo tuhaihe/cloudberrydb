@@ -35,6 +35,10 @@
 #   --enable-pxf                -> -Dpxf=enabled
 #   --enable-orafce             -> -Dorafce=enabled
 #   --enable-ic-proxy           -> -Dic_proxy=enabled
+#   --enable-gpcloud            -> -Dgpcloud=enabled
+#   --enable-mapreduce          -> -Dmapreduce=enabled
+#   --enable-pax                -> -Dpax=enabled
+#   --with-diskquota            -> -Ddiskquota=enabled
 #   --enable-tap-tests          -> -Dtap_tests=enabled
 #   --with-gssapi               -> -Dgssapi=enabled
 #   --with-ldap                 -> -Dldap=enabled
@@ -50,9 +54,11 @@
 #   --with-includes=...         -> -Dextra_include_dirs=...
 #   --with-libraries=...        -> -Dextra_lib_dirs=...
 #
-# Not yet reachable from meson, and therefore not enabled here:
-#   --enable-gpcloud, --enable-pax, --enable-mapreduce,
-#   --with-diskquota, --with-gp-stats-collector
+# Not enabled here: --with-gp-stats-collector. It is wired up, but
+# src/hook_wrappers.h declares test_uds_receive() as returning int64_t while
+# the definition returns PG's int64. Those are the same type on 64-bit Linux
+# and differ on macOS, so it could not be verified locally; enable it once
+# someone has confirmed it builds.
 #
 # Deliberately dropped: --with-pythonsrc-ext downloads psutil / PyYAML /
 # PyGreSQL from PyPI during `make install`, which has no honest meson
@@ -138,6 +144,10 @@ jobs:
           -Dorafce=enabled \
           -Dic_proxy=enabled \
           -Dgpfdist=enabled \
+          -Dgpcloud=enabled \
+          -Dmapreduce=enabled \
+          -Ddiskquota=enabled \
+          -Dpax=enabled \
           -Dtap_tests=enabled \
           -Dgssapi=enabled \
           -Dldap=enabled \
