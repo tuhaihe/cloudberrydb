@@ -11,10 +11,11 @@ project('postgresql',
   version: '16.9',
   license: 'PostgreSQL',
 
-  # We want < 0.56 for python 3.5 compatibility on old platforms. EPEL for
-  # RHEL 7 has 0.55. < 0.54 would require replacing some uses of the fs
-  # module, < 0.53 all uses of fs. So far there's no need to go to >=0.56.
-  meson_version: '>=0.54',
+  # Upstream targets >=0.54 to stay usable on old platforms. Cloudberry needs
+  # install_symlink (0.61) for three symlinks its Makefiles create:
+  # $bindir/stream/stream, $bindir/lib/gpcheckcat and gps3ext.so. All platforms
+  # Cloudberry builds on ship a newer meson, or install it from pip.
+  meson_version: '>=0.61',
   default_options: [
     'warning_level=1', #-Wall equivalent
     'b_pch=false',
@@ -2021,13 +2022,16 @@ if llvm.found()
   cxxflags_warn += cpp.get_supported_arguments(common_warning_flags)
 endif
 
-# A few places with imported code get a pass on -Wdeclaration-after-statement, remember
-# the result for them
+# Upstream enables -Wdeclaration-after-statement here. Cloudberry does not:
+# configure.ac keeps that check commented out because, in its own words, "GPDB
+# code is full of declarations after statement". Enabling it produces a couple
+# of thousand warnings and no signal.
+#
+# Because the positive flag is never added, configure.ac also leaves
+# PERMIT_DECLARATION_AFTER_STATEMENT empty, so the places that would opt out
+# of the warning (src/common's ryu code) need nothing either. Keep the variable
+# defined so those call sites stay unchanged.
 cflags_no_decl_after_statement = []
-if cc.has_argument('-Wdeclaration-after-statement')
-  cflags_warn += '-Wdeclaration-after-statement'
-  cflags_no_decl_after_statement += '-Wno-declaration-after-statement'
-endif
 
 
 # The following tests want to suppress various unhelpful warnings by adding
@@ -2049,6 +2053,11 @@ negative_warning_flags = [
 
   # Suppress clang 16's strict warnings about function casts
   'cast-function-type-strict',
+
+  # Variables that are set but otherwise unused. configure.ac disables this
+  # too: the warnings were all fixed upstream, but Cloudberry-added code still
+  # emits them. Its TODO to fix that code and drop this applies here as well.
+  'unused-but-set-variable',
 
   # To make warning_level=2 / -Wextra work, we'd need at least the following
   # 'clobbered',
@@ -2745,6 +2754,24 @@ cdata.set('ENABLE_THREAD_SAFETY', 1)
 ###############################################################
 
 nlsopt = get_option('nls')
+
+# Cloudberry does not support NLS, and has not since Greenplum removed it in
+# 2015 (commit 7afc98bca0c, "Remove support for NLS."): there are no
+# translations for Greenplum- or Cloudberry-specific strings, and all .po
+# files were deleted at the time. configure.ac keeps the whole NLS block
+# commented out, so --enable-nls is not even an option there.
+#
+# The PG16 merge reintroduced some upstream .po files and the po/LINGUAS files
+# that PG16 added, but the two do not agree: LINGUAS came in whole from
+# upstream while the .po set did not, so several LINGUAS entries name catalogs
+# that are not in the tree. Building with NLS would fail on those, and would
+# in any case produce catalogs covering only upstream messages.
+#
+# Fail loudly rather than half-translate; see configure.ac for the conditions
+# under which NLS could be supported properly.
+if nlsopt.enabled()
+  error('NLS is not supported by Cloudberry; see the NLS comment in configure.ac')
+endif
 libintl = not_found_dep
 
 if not nlsopt.disabled()
