@@ -115,8 +115,11 @@ option('llvm', type: 'feature', value: 'disabled',
 option('lz4', type: 'feature', value: 'auto',
   description: 'LZ4 support')
 
-option('nls', type: 'feature', value: 'auto',
-  description: 'Native language support')
+# Cloudberry does not support NLS. See the comment in configure.ac and the
+# error raised in meson.build; upstream's default here is 'auto', which would
+# silently enable NLS whenever gettext happens to be installed.
+option('nls', type: 'feature', value: 'disabled',
+  description: 'Native language support (not supported by Cloudberry)')
 
 option('pam', type: 'feature', value: 'auto',
   description: 'PAM support')

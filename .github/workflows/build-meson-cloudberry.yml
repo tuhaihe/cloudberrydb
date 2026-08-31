@@ -113,7 +113,7 @@ jobs:
       run: |
         set -euox pipefail
         # The build image ships autoconf/make but not meson.
-        python3 -m pip install --disable-pip-version-check 'meson>=0.54' ninja
+        python3 -m pip install --disable-pip-version-check 'meson>=0.61' ninja
         meson --version
         ninja --version
 
