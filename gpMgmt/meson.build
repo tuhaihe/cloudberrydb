@@ -20,6 +20,22 @@
 
 gpmgmt_subst_version = files('bin/subst_version.py')
 
+# gpMgmt/Makefile generates $prefix/cloudberry-env.sh by running
+# bin/generate-cloudberry-env.sh and redirecting its stdout. The generator uses
+# a quoted heredoc, so its output is entirely static and derives GPHOME at
+# runtime -- nothing from the build environment leaks in.
+#
+# gpAux/gpdemo/demo_cluster.sh sources this file, and it is how users set up
+# their environment, so an install without it is not usable.
+cloudberry_env_sh = custom_target('cloudberry-env.sh',
+  output: 'cloudberry-env.sh',
+  command: [bash, files('bin/generate-cloudberry-env.sh')],
+  capture: true,
+  build_by_default: true,
+  install: true,
+  install_dir: dir_prefix,
+)
+
 subdir('sbin')
 subdir('bin')
 subdir('doc')
