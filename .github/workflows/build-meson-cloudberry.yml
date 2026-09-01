@@ -84,8 +84,11 @@
 #
 # Deliberately dropped: --with-pythonsrc-ext downloads psutil / PyYAML /
 # PyGreSQL from PyPI during `make install`, which has no honest meson
-# equivalent. They are external runtime dependencies instead, which is why
-# cluster-test installs them before calling gpinitsystem.
+# equivalent -- a build should not reach the network. The meson build still
+# installs those modules, but only if they have already been staged in
+# gpMgmt/bin/ext; see gpMgmt/install_python_modules.py. The build job stages
+# them the same way the autoconf build does, so the install tree
+# cluster-test unpacks is self-contained.
 # --------------------------------------------------------------------
 name: Apache Cloudberry Meson Build
 
@@ -106,7 +109,10 @@ concurrency:
 env:
   BUILD_IMAGE: apache/incubator-cloudberry:cbdb-build-rocky9-latest
   INSTALL_PREFIX: /usr/local/cloudberry-db
-  MESON_VERSION: '>=0.61'
+  # Matches meson.build's floor. Pinned rather than left to pip's latest so
+  # that CI fails the same way a supported-but-old meson would, instead of
+  # silently depending on features newer than the project claims to need.
+  MESON_VERSION: '>=0.54'
 
 jobs:
   # ------------------------------------------------------------------
@@ -247,15 +253,30 @@ jobs:
     - name: Fail on meson warnings
       run: |
         set -euo pipefail
-        # meson_version warnings mean a feature is used that the declared floor
-        # does not cover. They are cheap to fix and easy to miss, so treat them
-        # as errors here rather than letting them accumulate.
-        if grep -q "uses feature introduced in" build-meson/meson-logs/meson-log.txt; then
-          echo "::error::meson reported meson_version feature warnings"
-          grep "uses feature introduced in" build-meson/meson-logs/meson-log.txt
+        LOG=build-meson/meson-logs/meson-log.txt
+        # Three kinds of warning are about the declared meson floor, and all
+        # three are actionable and platform-independent:
+        #
+        #   uses feature introduced in   the floor is too low for the code
+        #   uses feature deprecated      the floor is high enough that meson
+        #                                now objects to upstream's own APIs
+        #   always evaluates to true     the floor made an upstream version
+        #                                guard dead
+        #
+        # A configure that reports none of them is the evidence that the floor
+        # in meson.build is the right one, so treat any as a failure. Other
+        # warnings can be environment-specific, so those are only reported.
+        if grep -qE "uses feature introduced in|uses feature deprecated|always evaluates to true" "${LOG}"; then
+          echo "::error::meson reported version-floor warnings"
+          grep -E "uses feature introduced in|uses feature deprecated|always evaluates to true" "${LOG}"
           exit 1
         fi
-        echo "No meson_version feature warnings"
+        echo "No meson version-floor warnings"
+        OTHER=$(grep -c "WARNING" "${LOG}" || true)
+        echo "Other meson warnings: ${OTHER}"
+        if [ "${OTHER}" -gt 0 ]; then
+          grep "WARNING" "${LOG}" | head -20
+        fi
 
     - name: ninja build
       run: |
@@ -285,6 +306,23 @@ jobs:
       run: |
         set -euox pipefail
         su gpadmin -c "cd ${GITHUB_WORKSPACE} && ninja -C build-meson install"
+
+    - name: Stage gpMgmt Python modules
+      if: matrix.upload
+      run: |
+        set -euox pipefail
+        # psutil, PyGreSQL and PyYAML are runtime dependencies of the
+        # management utilities, not build inputs. The meson build installs them
+        # if they have been staged in gpMgmt/bin/ext but never downloads them,
+        # so stage them with gpMgmt/bin's own targets -- the same ones
+        # --with-pythonsrc-ext drives -- and install a second time to pick them
+        # up. PyGreSQL needs pg_config, hence the order.
+        su gpadmin -c "cd ${GITHUB_WORKSPACE} && PATH=${INSTALL_PREFIX}/bin:\$PATH \
+          make -C gpMgmt/bin TAR=tar psutil pygresql pyyaml"
+        su gpadmin -c "cd ${GITHUB_WORKSPACE} && ninja -C build-meson install"
+        test -d "${INSTALL_PREFIX}/lib/python/psutil"
+        test -f "${INSTALL_PREFIX}/lib/python/pg.py"
+        test -d "${INSTALL_PREFIX}/lib/python/yaml"
 
     - name: Smoke test
       run: |
@@ -360,14 +398,6 @@ jobs:
         chown -R gpadmin:gpadmin "${GITHUB_WORKSPACE}"
         test -x "${INSTALL_PREFIX}/bin/postgres"
         test -f "${INSTALL_PREFIX}/cloudberry-env.sh"
-
-    - name: Install gpMgmt Python dependencies
-      run: |
-        set -euox pipefail
-        # The meson build does not vendor these (see the header comment); they
-        # are runtime dependencies of the management utilities.
-        python3 -m pip install --disable-pip-version-check -r python-dependencies.txt
-        su gpadmin -c "python3 -c 'import psutil, pg, yaml; print(\"deps ok\")'"
 
     - name: Create demo cluster and run MPP checks
       run: |

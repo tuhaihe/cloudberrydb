@@ -29,3 +29,10 @@ install_data(
   'osInterface.py',
   install_dir: gppylib_dir / 'system',
 )
+
+# Installed executable by the Makefile, unlike its neighbours above.
+install_data(
+  'ComputeCatalogUpdate.py',
+  install_dir: gppylib_dir / 'system',
+  install_mode: 'rwxr-xr-x',
+)

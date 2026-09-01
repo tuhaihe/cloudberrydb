@@ -45,7 +45,9 @@ gpmapreduce = executable('gpmapreduce',
   files('src/main.c', 'src/mapred.c', 'src/parse.c'),
   gpmapreduce_yaml_parse,
   gpmapreduce_yaml_scan,
-  c_args: ['-DFRONTEND'],
+  # The Makefile disables -Wimplicit-fallthrough for this module: "it is hard
+  # to change some macros using switch-case".
+  c_args: ['-DFRONTEND', '-Wno-implicit-fallthrough'],
   # '.' picks up this directory in the *build* tree too, where bison puts
   # yaml_parse.h -- the generated scanner includes it.
   include_directories: include_directories('.', 'src', 'include'),

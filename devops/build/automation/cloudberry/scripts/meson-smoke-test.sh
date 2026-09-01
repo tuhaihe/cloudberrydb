@@ -53,6 +53,29 @@ echo "== checking PAX =="
   || fail "missing generated pax-cdbinit--1.0.sql"
 echo "  ok  pax-cdbinit--1.0.sql"
 
+echo "== checking library layout =="
+# These paths are not interchangeable: cloudberry-env.sh hardcodes
+# PYTHONPATH=$GPHOME/lib/python and LD_LIBRARY_PATH=$GPHOME/lib, so an install
+# that lands them in lib64 (meson's default on RHEL) is broken even though
+# every binary is present. Check the paths, not just the files.
+[ -d "${PREFIX}/lib/postgresql" ] || fail "no lib/postgresql -- is libdir set to lib?"
+echo "  ok  lib/postgresql"
+[ -f "${PREFIX}/lib/python/gppylib/gpversion.py" ] \
+  || fail "gppylib is not under lib/python -- is libdir set to lib?"
+echo "  ok  lib/python/gppylib"
+[ -d "${PREFIX}/lib64" ] && fail "install split across lib and lib64"
+echo "  ok  nothing in lib64"
+
+echo "== checking gpMgmt =="
+[ -f "${PREFIX}/cloudberry-env.sh" ] || fail "missing cloudberry-env.sh"
+echo "  ok  cloudberry-env.sh"
+for b in gpinitsystem gpstart gpstop gpstate; do
+  [ -x "${PREFIX}/bin/${b}" ] || fail "missing bin/${b}"
+  echo "  ok  bin/${b}"
+done
+[ -f "${PREFIX}/bin/lib/gpdemo/demo_cluster.sh" ] || fail "missing gpdemo scripts"
+echo "  ok  bin/lib/gpdemo"
+
 echo "== checking generated catalog data =="
 for f in system_views_gp.sql cdb_init.d/cdb_schema.sql postgres.bki; do
   [ -f "${PREFIX}/share/postgresql/${f}" ] || fail "missing share/postgresql/${f}"
@@ -102,6 +125,18 @@ grep -qE 'n = "[1-9][0-9]*"' "${WORKDIR}/views.out" || {
   fail "no gp_* views were created"
 }
 echo "  ok  $(sed -n 's/.*n = "\([0-9]*\)".*/\1/p' "${WORKDIR}/views.out" | head -1) gp_* views"
+
+echo "== checking the version string =="
+# gpMgmt parses select version() with gpversion.py, which insists on
+# "(Apache Cloudberry <version> build <build>)". Upstream's PG_VERSION_STR has
+# no such part, so a build that inherits it starts and serves queries but makes
+# every management utility fail; check the string, not just that it exists.
+run_sql "select version();" >"${WORKDIR}/version.out"
+grep -q "(Apache Cloudberry " "${WORKDIR}/version.out" || {
+  cat "${WORKDIR}/version.out" >&2
+  fail "version() does not identify Cloudberry -- is PG_VERSION_STR upstream's?"
+}
+echo "  ok  $(sed -n 's/.*(\(Apache Cloudberry [^)]*\)).*/\1/p' "${WORKDIR}/version.out" | head -1)"
 
 echo "== checking ORCA =="
 run_sql "select gp_opt_version();" >"${WORKDIR}/orca.out"

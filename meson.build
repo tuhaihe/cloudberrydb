@@ -11,11 +11,10 @@ project('postgresql',
   version: '16.9',
   license: 'PostgreSQL',
 
-  # Upstream targets >=0.54 to stay usable on old platforms. Cloudberry needs
-  # install_symlink (0.61) for three symlinks its Makefiles create:
-  # $bindir/stream/stream, $bindir/lib/gpcheckcat and gps3ext.so. All platforms
-  # Cloudberry builds on ship a newer meson, or install it from pip.
-  meson_version: '>=0.61',
+  # We want < 0.56 for python 3.5 compatibility on old platforms. EPEL for
+  # RHEL 7 has 0.55. < 0.54 would require replacing some uses of the fs
+  # module, < 0.53 all uses of fs. So far there's no need to go to >=0.56.
+  meson_version: '>=0.54',
   default_options: [
     'warning_level=1', #-Wall equivalent
     'b_pch=false',
@@ -24,6 +23,13 @@ project('postgresql',
     # works even on windows, where it's a drive-relative path (i.e. when on
     # d:/somepath it'll install to d:/usr/local/pgsql)
     'prefix=/usr/local/pgsql',
+
+    # meson derives libdir from the platform, which is lib64 on RHEL and its
+    # derivatives. autoconf uses plain lib, and Cloudberry depends on that:
+    # cloudberry-env.sh hardcodes PYTHONPATH=$GPHOME/lib/python and
+    # LD_LIBRARY_PATH=$GPHOME/lib, so gppylib and libpostgres.so have to land
+    # in lib. Pin it for the same compatibility reason as the prefix above.
+    'libdir=lib',
   ]
 )
 
@@ -2729,13 +2735,9 @@ cdata.set('MEMSET_LOOP_LIMIT', memset_loop_limit)
 cdata.set_quoted('DLSUFFIX', dlsuffix)
 
 
-# built later than the rest of the version metadata, we need SIZEOF_VOID_P
-cdata.set_quoted('PG_VERSION_STR',
-  'PostgreSQL @0@ on @1@-@2@, compiled by @3@-@4@, @5@-bit'.format(
-    pg_version, host_machine.cpu_family(), host_system,
-    cc.get_id(), cc.version(), cdata.get('SIZEOF_VOID_P') * 8,
-  )
-)
+# PG_VERSION_STR is set further down, in the Cloudberry configuration section:
+# it needs SIZEOF_VOID_P, which is why upstream builds it here, but it also
+# needs the Cloudberry version, which is computed later still.
 
 
 
@@ -3022,6 +3024,16 @@ generated_sources_ac = {}
 # its own directory, so it is safe to invoke from any working directory.
 bash = find_program('bash', native: true)
 
+# Three of Cloudberry's Makefiles install a symlink. meson.add_install_script
+# with this helper is the 0.54-compatible way to do that; see its header for
+# why the alternative -- install_symlink, and the floor it needs -- costs more
+# than it saves.
+#
+# A plain path, not files(): add_install_script only learned to take a File in
+# 0.55. meson.source_root() is how upstream spells this at the same floor --
+# project_source_root() would itself be too new.
+gp_install_symlink = meson.source_root() / 'src' / 'tools' / 'install_symlink.py'
+
 gp_version_long = run_command('bash', meson.current_source_dir() / 'getversion',
   check: true).stdout().strip()
 gp_version_short = run_command('bash', meson.current_source_dir() / 'getversion',
@@ -3045,6 +3057,25 @@ endif
 cdata.set_quoted('GP_VERSION', gp_version_long)
 cdata.set_quoted('GP_MAJORVERSION', gp_majorversion)
 cdata.set('GP_VERSION_NUM', gp_version_num)
+
+# This is what `select version()` returns, and gpMgmt parses it: gpversion.py
+# looks for "(Apache Cloudberry <version> build <build>)" and refuses to run
+# against anything else, so dropping the parenthesised part -- as the upstream
+# string does -- makes gpstart, gpstop and gpstate fail on a cluster that is
+# otherwise perfectly healthy. Keep it byte-compatible with configure.ac:
+#
+#   PostgreSQL $PG_VERSION (Apache Cloudberry $GP_VERSION) on $host, \
+#     compiled by $cc_string, N-bit
+#
+# The host and compiler spellings still differ from autoconf's, because meson
+# has no config.guess triplet and reports the compiler as id-version. Nothing
+# parses those.
+cdata.set_quoted('PG_VERSION_STR',
+  'PostgreSQL @0@ (Apache Cloudberry @1@) on @2@-@3@, compiled by @4@-@5@, @6@-bit'.format(
+    pg_version, gp_version_long, host_machine.cpu_family(), host_system,
+    cc.get_id(), cc.version(), cdata.get('SIZEOF_VOID_P') * 8,
+  )
+)
 
 # ORCA optimizer (orcaopt / xerces are resolved near the top of this file,
 # because enabling C++ has to happen before any C++ target is defined)

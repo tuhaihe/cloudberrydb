@@ -60,9 +60,9 @@ contrib_targets += gpcloud
 
 # The Makefile overrides contrib-global.mk's install target purely to add this
 # symlink: ln -sf gpcloud.so $(pkglibdir)/gps3ext.so
-install_symlink('gps3ext' + dlsuffix,
-  install_dir: dir_lib_pkg,
-  pointing_to: 'gpcloud' + dlsuffix,
+meson.add_install_script(gp_install_symlink,
+  dir_lib_pkg / 'gps3ext' + dlsuffix,
+  'gpcloud' + dlsuffix,
 )
 
 subdir('bin/gpcheckcloud')

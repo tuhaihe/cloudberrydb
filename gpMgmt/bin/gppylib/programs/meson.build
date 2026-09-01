@@ -33,3 +33,12 @@ foreach f : [
     install_dir: gppylib_dir / 'programs',
   )
 endforeach
+
+# gppkg.py gets both treatments the Makefile gives it: installed executable,
+# and run through putversion like the cls* modules above.
+install_data(
+  configure_file(input: 'gppkg.py', output: 'gppkg.py',
+    command: [python, gpmgmt_subst_version, '@INPUT@', '@OUTPUT@', gp_version_long]),
+  install_dir: gppylib_dir / 'programs',
+  install_mode: 'rwxr-xr-x',
+)

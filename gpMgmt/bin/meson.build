@@ -82,7 +82,7 @@ install_data(
 )
 
 # if [ ! -L $(bindir)/lib/gpcheckcat ]; then ln -s ../gpcheckcat gpcheckcat
-install_symlink('gpcheckcat',
-  install_dir: dir_bin / 'lib',
-  pointing_to: '..' / 'gpcheckcat',
+meson.add_install_script(gp_install_symlink,
+  dir_bin / 'lib' / 'gpcheckcat',
+  '..' / 'gpcheckcat',
 )

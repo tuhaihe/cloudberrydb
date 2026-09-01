@@ -41,3 +41,10 @@ install_data(
   install_dir: dir_bin / 'lib',
   install_mode: 'rwxr-xr-x',
 )
+
+# Not a program: gpmemreport feeds this to gdb as a batch script. The Makefile
+# installs it with INSTALL_DATA for that reason.
+install_data(
+  'crashreport.gdb',
+  install_dir: dir_bin / 'lib',
+)
