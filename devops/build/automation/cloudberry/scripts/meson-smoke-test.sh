@@ -23,35 +23,78 @@
 # catalog generation end to end), and that the MPP-specific pieces are really
 # there rather than merely linked.
 #
-# Usage: meson-smoke-test.sh <install-prefix>
+# Usage: meson-smoke-test.sh <install-prefix> <build-dir>
+#
+# The build directory is read, not written: which optional components an
+# install should contain depends on how it was configured, so the expected set
+# is taken from meson rather than hardcoded. That is what lets one smoke test
+# serve every entry in the build matrix instead of only the full one.
 # --------------------------------------------------------------------
 set -euo pipefail
 
-PREFIX="${1:?usage: $0 <install-prefix>}"
+PREFIX="${1:?usage: $0 <install-prefix> <build-dir>}"
+BUILDDIR="${2:?usage: $0 <install-prefix> <build-dir>}"
 export LD_LIBRARY_PATH="${PREFIX}/lib:${LD_LIBRARY_PATH:-}"
 
 fail() { echo "::error::$*" >&2; exit 1; }
 
+INTRO="${BUILDDIR}/meson-info/intro-buildoptions.json"
+[ -f "${INTRO}" ] || fail "no ${INTRO} -- is ${BUILDDIR} a meson build directory?"
+
+# True when the named option was configured on. Feature options read
+# "enabled"; booleans read true. An option meson does not know is a typo here,
+# and is reported rather than quietly treated as off.
+enabled() {
+  python3 - "$1" "${INTRO}" <<'PY'
+import json, sys
+name, intro = sys.argv[1], sys.argv[2]
+options = {o["name"]: o["value"] for o in json.load(open(intro))}
+if name not in options:
+    sys.stderr.write("::error::no such meson option: %s\n" % name)
+    sys.exit(2)
+sys.exit(0 if options[name] in (True, "enabled") else 1)
+PY
+}
+
 # --------------------------------------------------------------------
 # 1. Installed artifacts
 # --------------------------------------------------------------------
+check_bin() {
+  [ -x "${PREFIX}/bin/$1" ] || fail "missing bin/$1"
+  echo "  ok  bin/$1"
+}
+
 echo "== checking installed binaries =="
-for b in postgres initdb pg_ctl psql pg_dump pg_upgrade gpfdist gpfts \
-         gpmapreduce gpcheckcloud pg_alterckey; do
-  [ -x "${PREFIX}/bin/${b}" ] || fail "missing bin/${b}"
-  echo "  ok  bin/${b}"
+for b in postgres initdb pg_ctl psql pg_dump pg_upgrade gpfts pg_alterckey; do
+  check_bin "${b}"
 done
+# Gated on the option that builds each one, so that a configuration which did
+# not ask for a component is not failed for not having it -- and a
+# configuration that did ask still has to produce it.
+if enabled gpfdist;   then check_bin gpfdist;     else echo "  skip  gpfdist (disabled)"; fi
+if enabled mapreduce; then check_bin gpmapreduce; else echo "  skip  gpmapreduce (disabled)"; fi
+if enabled gpcloud;   then check_bin gpcheckcloud; else echo "  skip  gpcheckcloud (disabled)"; fi
 
 echo "== checking GP extensions =="
-for e in interconnect gp_exttable_fdw gp_toolkit gp_distribution_policy pxf_fdw; do
+for e in interconnect gp_exttable_fdw gp_toolkit gp_distribution_policy; do
   [ -f "${PREFIX}/share/postgresql/extension/${e}.control" ] || fail "missing extension ${e}"
   echo "  ok  ${e}"
 done
+if enabled pxf; then
+  [ -f "${PREFIX}/share/postgresql/extension/pxf_fdw.control" ] || fail "missing extension pxf_fdw"
+  echo "  ok  pxf_fdw"
+else
+  echo "  skip  pxf_fdw (disabled)"
+fi
 
 echo "== checking PAX =="
-[ -f "${PREFIX}/share/postgresql/cdb_init.d/pax-cdbinit--1.0.sql" ] \
-  || fail "missing generated pax-cdbinit--1.0.sql"
-echo "  ok  pax-cdbinit--1.0.sql"
+if enabled pax; then
+  [ -f "${PREFIX}/share/postgresql/cdb_init.d/pax-cdbinit--1.0.sql" ] \
+    || fail "missing generated pax-cdbinit--1.0.sql"
+  echo "  ok  pax-cdbinit--1.0.sql"
+else
+  echo "  skip  pax (disabled)"
+fi
 
 echo "== checking library layout =="
 # These paths are not interchangeable: cloudberry-env.sh hardcodes
@@ -104,9 +147,14 @@ echo "  ok  initdb"
 # A full postmaster needs an MPP identity (-b dbid) and a segment
 # configuration; single-user mode is enough to prove the catalogs, the
 # optimizer and the storage layer are functional.
+# optimizer=on is fatal in a build without ORCA -- "ORCA is not supported by
+# this build" -- so it goes on only when there is an optimizer to ask for.
+PG_OPTS=(-c gp_role=utility)
+if enabled orca; then PG_OPTS+=(-c optimizer=on); fi
+
 run_sql() {
   printf '%s\n' "$1" | "${PREFIX}/bin/postgres" --single -D "${DATADIR}" \
-    -c gp_role=utility -c optimizer=on postgres 2>&1
+    "${PG_OPTS[@]}" postgres 2>&1
 }
 
 echo "== checking GP catalogs =="
@@ -139,12 +187,16 @@ grep -q "(Apache Cloudberry " "${WORKDIR}/version.out" || {
 echo "  ok  $(sed -n 's/.*(\(Apache Cloudberry [^)]*\)).*/\1/p' "${WORKDIR}/version.out" | head -1)"
 
 echo "== checking ORCA =="
-run_sql "select gp_opt_version();" >"${WORKDIR}/orca.out"
-grep -q "GPOPT version" "${WORKDIR}/orca.out" || {
-  cat "${WORKDIR}/orca.out" >&2
-  fail "ORCA is not available"
-}
-echo "  ok  $(sed -n 's/.*gp_opt_version = "\([^"]*\)".*/\1/p' "${WORKDIR}/orca.out" | head -1)"
+if enabled orca; then
+  run_sql "select gp_opt_version();" >"${WORKDIR}/orca.out"
+  grep -q "GPOPT version" "${WORKDIR}/orca.out" || {
+    cat "${WORKDIR}/orca.out" >&2
+    fail "ORCA is not available"
+  }
+  echo "  ok  $(sed -n 's/.*gp_opt_version = "\([^"]*\)".*/\1/p' "${WORKDIR}/orca.out" | head -1)"
+else
+  echo "  skip  orca (disabled)"
+fi
 
 echo "== checking append-only storage =="
 run_sql "create table t_ao(a int) with (appendonly=true);" >/dev/null
