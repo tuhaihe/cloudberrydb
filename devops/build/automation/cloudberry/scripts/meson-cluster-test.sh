@@ -37,6 +37,9 @@ SRCDIR="${2:?usage: $0 <install-prefix> <source-dir>}"
 fail() { echo "::error::$*" >&2; exit 1; }
 section() { echo; echo "== $* =="; }
 
+OUTDIR="$(mktemp -d)"
+trap 'rm -rf "${OUTDIR}"' EXIT
+
 # --------------------------------------------------------------------
 # Environment
 # --------------------------------------------------------------------
@@ -85,6 +88,7 @@ cleanup() {
   echo
   echo "== tearing down the demo cluster =="
   make -C "${SRCDIR}/gpAux/gpdemo" destroy-demo-cluster >/dev/null 2>&1 || true
+  rm -rf "${OUTDIR}"
 }
 trap cleanup EXIT
 
@@ -92,6 +96,22 @@ section "restarting the cluster"
 gpstop -a  || fail "gpstop failed"
 gpstart -a || fail "gpstart failed"
 gpstate    || fail "gpstate failed"
+
+section "gpcheckcat"
+# Runs before any user tables exist, so the catalog is pristine and a failure
+# means the installation rather than the workload. Its foreign_key test reads
+# gppylib/data/<major>.json, generated at build time from the catalog headers;
+# gpcheckcat is the only thing that reads it, so nothing else notices when the
+# install does not have it.
+gpcheckcat -p "${PGPORT}" postgres >"${OUTDIR}/gpcheckcat.out" 2>&1 || {
+  tail -30 "${OUTDIR}/gpcheckcat.out" >&2
+  fail "gpcheckcat failed"
+}
+grep -q "Found no catalog issue" "${OUTDIR}/gpcheckcat.out" || {
+  tail -30 "${OUTDIR}/gpcheckcat.out" >&2
+  fail "gpcheckcat did not report a clean catalog"
+}
+echo "  ok  $(grep -c "^Performing test" "${OUTDIR}/gpcheckcat.out") catalog tests, no issues"
 
 # --------------------------------------------------------------------
 # MPP checks

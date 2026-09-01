@@ -35,6 +35,17 @@ finished install:
     PATH=$prefix/bin:$PATH make -C gpMgmt/bin TAR=tar psutil pygresql pyyaml
     ninja -C build install
 
+That target fetches the three tarballs from PyPI the first time, and skips
+any it already finds, so an air-gapped or offline build only has to put them
+in gpMgmt/bin/pythonSrc/ext beforehand -- at the exact versions named at the
+top of gpMgmt/bin/Makefile:
+
+    psutil-5.7.0.tar.gz  PyGreSQL-5.2.tar.gz  PyYAML-5.4.1.tar.gz
+
+Fetching them is then a step you control, and nothing after `meson setup`
+reaches the network.  (They are not vendored in the repo; downloading them
+is what replaced that, under the Apache release policy.)
+
 Anything else that leaves importable modules in gpMgmt/bin/ext works too --
 a virtualenv's site-packages copied in, or distribution packages.  An
 install with nothing staged is still a valid install; it just cannot run the

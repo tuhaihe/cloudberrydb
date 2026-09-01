@@ -29,20 +29,29 @@
 #
 # Shape, mirroring build-cloudberry.yml:
 #
-#   check-skip  -> build (matrix) -> cluster-test -> report
+#   check-skip -> install-parity -> report
+#              -> build (matrix) -> cluster-test -> report
 #
-# The build matrix is the part that earns its keep today. Most of the bugs
-# found while porting were in option combinations rather than in any single
-# configuration: C++ being enabled only for ORCA, PAX requiring the shared
-# backend, extensions gated on flags that were never exercised together. Three
-# configurations cover that surface:
+# install-parity is static and finishes in seconds, so the most common porting
+# mistake -- a file added to a Makefile and not to the meson.build beside it --
+# is reported long before the build that would not have caught it anyway.
 #
-#   full                 every component this branch supports
-#   minimal              everything optional switched off, which catches
-#                        conditional guards that only work when enabled
-#   no-shared-backend    -Dshared_postgres_backend=false, a path nothing else
-#                        covers (PAX has to come off with it, since PAX links
-#                        against libpostgres.so)
+# The build matrix is two configurations, and they are opposites:
+#
+#   full      every component this branch supports, and the reference line in
+#             coverity.yml. It is what cluster-test runs against.
+#   minimal   every optional component off, shared_postgres_backend included
+#
+# One build would only ever exercise the enabled side of each `if
+# get_option(...)` in the meson files, and the disabled side is where this
+# port's bugs were: C++ enabled only for ORCA, PAX requiring the shared
+# backend, extensions gated on flags nothing turned off. Between the two,
+# every option is compiled in both states.
+#
+# What that pair does not reach is a cross -- ORCA on with the shared backend
+# off, which is the one combination where C++ objects link into a static
+# postgres. Add a third configuration if that link ever needs guarding; until
+# then it is not worth a third full build of the tree.
 #
 # Regression suites are NOT run here yet. src/test/regress and friends are
 # make-driven and include src/Makefile.global from the source tree, which only
@@ -86,17 +95,22 @@
 # PyGreSQL from PyPI during `make install`, which has no honest meson
 # equivalent -- a build should not reach the network. The meson build still
 # installs those modules, but only if they have already been staged in
-# gpMgmt/bin/ext; see gpMgmt/install_python_modules.py. The build job stages
-# them the same way the autoconf build does, so the install tree
-# cluster-test unpacks is self-contained.
+# gpMgmt/bin/ext; see gpMgmt/install_python_modules.py.
+#
+# The build job splits that in two, so the boundary is real rather than
+# rhetorical: the sources are fetched up front, alongside meson and ninja and
+# before anything is configured, and are unpacked and compiled after the
+# install (PyGreSQL needs pg_config). Nothing between meson setup and the end
+# of the build touches the network, an unreachable PyPI fails the job in
+# seconds, and the tarballs are cached between runs.
 # --------------------------------------------------------------------
 name: Apache Cloudberry Meson Build
 
 on:
   push:
-    branches: [ main, pg16-ci ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, pg16-ci ]
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -137,6 +151,31 @@ jobs:
             echo "should_skip=true" >> "$GITHUB_OUTPUT"
           fi
         fi
+
+  # ------------------------------------------------------------------
+  install-parity:
+    name: Install parity
+    runs-on: ubuntu-22.04
+    needs: [check-skip]
+    if: needs.check-skip.outputs.should_skip != 'true'
+    steps:
+    - name: Checkout Apache Cloudberry
+      uses: actions/checkout@v7
+      with:
+        # No submodules: this job reads Makefiles and meson.build files and
+        # compiles nothing. Cloning googletest and friends would cost more
+        # than the check itself, and the point of the job is fast feedback.
+        fetch-depth: 1
+        submodules: false
+
+    - name: Compare Makefile install lists against meson.build
+      run: |
+        set -euo pipefail
+        # Static, so it runs in seconds and reports before the build finishes.
+        # It catches the failure mode this port is most exposed to: a file
+        # added to a Makefile and not to the meson.build beside it, which no
+        # build failure reveals and only a running cluster notices.
+        python3 devops/build/automation/cloudberry/scripts/meson-install-parity.py
 
   # ------------------------------------------------------------------
   build:
@@ -186,16 +225,9 @@ jobs:
             -Dmapreduce=disabled
             -Ddiskquota=disabled
             -Dpax=disabled
+            -Dshared_postgres_backend=false
             -Ddebug_extensions=false
             -Dtap_tests=disabled
-        - name: no-shared-backend
-          upload: false
-          options: >-
-            -Dshared_postgres_backend=false
-            -Dpax=disabled
-            -Dorca=enabled
-            -Dgpfdist=enabled
-            -Dpxf=enabled
 
     container:
       image: apache/incubator-cloudberry:cbdb-build-rocky9-latest
@@ -217,13 +249,53 @@ jobs:
           exit 1
         fi
 
-    - name: Install meson and ninja
+    - name: Install Python build tools
       run: |
         set -euox pipefail
         # The build image ships autoconf/make but not meson.
         python3 -m pip install --disable-pip-version-check "meson${MESON_VERSION}" ninja
         meson --version
         ninja --version
+        # What builds psutil, PyGreSQL and PyYAML later: they are setup.py
+        # distributions, and PyYAML cythonises its C extension. gpMgmt/bin's
+        # Makefile pip-installs wheel and Cython itself when they are absent,
+        # which on this image they are -- as gpadmin, mid-build, over the
+        # network. Installed here as root they are importable by gpadmin, so
+        # that check passes and the staging step stays offline. setuptools
+        # comes along because Python 3.12 dropped distutils and setup.py needs
+        # its shim; the rocky9 image already has it, images newer than it may
+        # not.
+        python3 -m pip install --disable-pip-version-check setuptools wheel "cython<3.0.0"
+
+    - name: Restore cached gpMgmt Python sources
+      if: matrix.upload
+      uses: actions/cache@v4
+      with:
+        # Only the tarballs. The unpacked trees and their build output live in
+        # the same directory and are worthless to cache -- they are rebuilt
+        # against this job's Python either way.
+        path: gpMgmt/bin/pythonSrc/ext/*.tar.gz
+        key: gpmgmt-python-src-${{ hashFiles('gpMgmt/bin/Makefile') }}
+
+    - name: Fetch gpMgmt Python sources
+      if: matrix.upload
+      run: |
+        set -euox pipefail
+        # psutil, PyGreSQL and PyYAML come from PyPI. Fetching them here, next
+        # to the other dependency installs and before anything is configured,
+        # keeps the build itself off the network and turns an unreachable PyPI
+        # into a failure in seconds rather than after a 40-minute build. They
+        # cannot be vendored in the repo -- downloading them is what replaced
+        # that, under the Apache release policy.
+        #
+        # This is the target the autoconf build uses, so the versions and URLs
+        # have one home. It skips any tarball already there, which is what
+        # makes the cache above work and what an offline build relies on.
+        # wheel and Cython, which it would otherwise pip-install here, are
+        # already in from the step above.
+        make -C gpMgmt/bin download-python-deps
+        for f in gpMgmt/bin/pythonSrc/ext/*.tar.gz; do gzip -t "${f}"; done
+        ls -la gpMgmt/bin/pythonSrc/ext/*.tar.gz
 
     - name: Prepare install prefix
       run: |
@@ -278,6 +350,21 @@ jobs:
           grep "WARNING" "${LOG}" | head -20
         fi
 
+    - name: Build the frontend common library first
+      run: |
+        set -euox pipefail
+        # src/common is compiled twice, once with -DFRONTEND. A backend header
+        # included there without an #ifndef FRONTEND guard drags in headers
+        # that only the backend build generates, and ninja is free to compile
+        # the frontend copy before anything has generated them -- so such a
+        # mistake fails the build or not depending on scheduling. It cost one
+        # red matrix entry and one green one on the same commit.
+        #
+        # Building this single target from cold, before the full build has
+        # produced anything, turns that coin flip into a deterministic check
+        # for the one directory that is compiled both ways.
+        su gpadmin -c "cd ${GITHUB_WORKSPACE} && ninja -C build-meson src/common/libpgcommon_shlib.a"
+
     - name: ninja build
       run: |
         set -euox pipefail
@@ -315,8 +402,11 @@ jobs:
         # management utilities, not build inputs. The meson build installs them
         # if they have been staged in gpMgmt/bin/ext but never downloads them,
         # so stage them with gpMgmt/bin's own targets -- the same ones
-        # --with-pythonsrc-ext drives -- and install a second time to pick them
-        # up. PyGreSQL needs pg_config, hence the order.
+        # --with-pythonsrc-ext drives.
+        #
+        # The sources were fetched before the build; this unpacks and compiles
+        # them. It cannot move earlier: PyGreSQL builds against pg_config, so
+        # it needs a finished install, and that is why the install runs twice.
         su gpadmin -c "cd ${GITHUB_WORKSPACE} && PATH=${INSTALL_PREFIX}/bin:\$PATH \
           make -C gpMgmt/bin TAR=tar psutil pygresql pyyaml"
         su gpadmin -c "cd ${GITHUB_WORKSPACE} && ninja -C build-meson install"
@@ -327,7 +417,9 @@ jobs:
     - name: Smoke test
       run: |
         set -euox pipefail
-        su gpadmin -c "${GITHUB_WORKSPACE}/devops/build/automation/cloudberry/scripts/meson-smoke-test.sh ${INSTALL_PREFIX}"
+        # The build directory is passed so the smoke test can read which
+        # optional components this configuration asked for; see its header.
+        su gpadmin -c "${GITHUB_WORKSPACE}/devops/build/automation/cloudberry/scripts/meson-smoke-test.sh ${INSTALL_PREFIX} ${GITHUB_WORKSPACE}/build-meson"
 
     - name: Package install tree
       if: matrix.upload
@@ -375,6 +467,10 @@ jobs:
     - name: Checkout Apache Cloudberry
       uses: actions/checkout@v7
       with:
+        # No submodules: this job runs against the install tree built by the
+        # build job, which does check them out -- PAX compiles against
+        # src/cpp/contrib/tabulate. Nothing is compiled here; the checkout is
+        # only for gpAux/gpdemo and the test scripts.
         fetch-depth: 1
         submodules: false
 
@@ -420,11 +516,12 @@ jobs:
   report:
     name: Report
     runs-on: ubuntu-22.04
-    needs: [check-skip, build, cluster-test]
+    needs: [check-skip, install-parity, build, cluster-test]
     if: always() && needs.check-skip.outputs.should_skip != 'true'
     steps:
     - name: Summarise
       run: |
+        PARITY="${{ needs.install-parity.result }}"
         BUILD="${{ needs.build.result }}"
         CLUSTER="${{ needs.cluster-test.result }}"
         {
@@ -432,11 +529,13 @@ jobs:
           echo
           echo "| Job | Result |"
           echo "| --- | --- |"
+          echo "| install-parity | ${PARITY} |"
           echo "| build (all configurations) | ${BUILD} |"
           echo "| cluster-test | ${CLUSTER} |"
         } >> "$GITHUB_STEP_SUMMARY"
-        if [ "${BUILD}" != "success" ] || [ "${CLUSTER}" != "success" ]; then
-          echo "::error::meson workflow failed (build=${BUILD} cluster-test=${CLUSTER})"
+        if [ "${PARITY}" != "success" ] || [ "${BUILD}" != "success" ] \
+           || [ "${CLUSTER}" != "success" ]; then
+          echo "::error::meson workflow failed (install-parity=${PARITY} build=${BUILD} cluster-test=${CLUSTER})"
           exit 1
         fi
         echo "All meson jobs passed"
