@@ -14,10 +14,22 @@
 # implied.  See the License for the specific language governing
 # permissions and limitations under the License.
 
-backend_sources += files(
+# This directory's Makefile adds -Wno-implicit-fallthrough to CPPFLAGS. meson
+# compiles the whole backend as one target, so the sources are split into their
+# own static library to carry the flag, the same way src/backend/nodes does for
+# its include path.
+task_sources = files(
   'entry.c',
   'job_metadata.c',
   'misc.c',
   'pg_cron.c',
   'task_states.c',
 )
+
+task_lib = static_library('task',
+  task_sources,
+  c_args: ['-Wno-implicit-fallthrough'],
+  dependencies: [backend_code],
+  kwargs: internal_lib_args,
+)
+backend_link_with += task_lib

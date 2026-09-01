@@ -13,3 +13,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 # implied.  See the License for the specific language governing
 # permissions and limitations under the License.
+
+# Only the package marker is installed. The tests themselves are not shipped,
+# but gpMgmttest has to remain importable: gppylib/Makefile recurses into it
+# for exactly this one file.
+install_data(
+  '__init__.py',
+  install_dir: gppylib_dir / 'gpMgmttest',
+)

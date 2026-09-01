@@ -20,7 +20,7 @@ stream_bin = executable('stream',
 )
 
 # Symlink kept for backward compatibility: $bindir/stream/stream -> ../lib/stream
-install_symlink('stream',
-  install_dir: dir_bin / 'stream',
-  pointing_to: '..' / 'lib' / 'stream',
+meson.add_install_script(gp_install_symlink,
+  dir_bin / 'stream' / 'stream',
+  '..' / 'lib' / 'stream',
 )

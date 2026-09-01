@@ -13,3 +13,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 # implied.  See the License for the specific language governing
 # permissions and limitations under the License.
+
+install_data(
+  '__init__.py',
+  'gp_utils.py',
+  'ssh_utils.py',
+  install_dir: gppylib_dir / 'util',
+)

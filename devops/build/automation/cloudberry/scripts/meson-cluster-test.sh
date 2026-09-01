@@ -50,14 +50,15 @@ echo "  GPHOME=${GPHOME:-unset}"
 [ -n "${GPHOME:-}" ] || fail "cloudberry-env.sh did not set GPHOME"
 
 section "checking the Python dependencies gpMgmt needs"
-# The meson build deliberately does not vendor these: --with-pythonsrc-ext
-# downloads them from PyPI during install, which has no meson equivalent, so
-# they are external runtime dependencies. gpinitsystem fails without them.
+# gpinitsystem fails without these. The meson build never downloads them, but
+# it does install whatever has been staged in gpMgmt/bin/ext, so finding them
+# here also proves cloudberry-env.sh puts $GPHOME/lib/python on PYTHONPATH and
+# that gpMgmt/install_python_modules.py put them there.
 for m in psutil pygresql yaml; do
   mod="${m}"
   [ "${m}" = "pygresql" ] && mod="pg"
   python3 -c "import ${mod}" 2>/dev/null && echo "  ok  ${m}" \
-    || fail "python module ${m} is missing; install python-dependencies.txt"
+    || fail "python module ${m} is missing from ${PREFIX}/lib/python; stage it with 'make -C gpMgmt/bin TAR=tar psutil pygresql pyyaml' and install again"
 done
 
 section "verifying ssh to localhost"

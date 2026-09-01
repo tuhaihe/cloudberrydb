@@ -22,3 +22,13 @@ install_data(
   'unix.py',
   install_dir: gppylib_dir / 'commands',
 )
+
+# The Makefile installs this one with INSTALL_SCRIPT rather than INSTALL_DATA.
+# It is imported, not executed, so the mode is of no consequence -- but it is
+# what the autoconf install produces, and the two trees should be comparable
+# file for file.
+install_data(
+  'base.py',
+  install_dir: gppylib_dir / 'commands',
+  install_mode: 'rwxr-xr-x',
+)

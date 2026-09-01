@@ -39,3 +39,10 @@ cloudberry_env_sh = custom_target('cloudberry-env.sh',
 subdir('sbin')
 subdir('bin')
 subdir('doc')
+
+# psutil, PyGreSQL and PyYAML land in $prefix/lib/python if they have been
+# staged in gpMgmt/bin/ext, the same conditional copy gpMgmt/Makefile does.
+# It has to be an install script rather than an install_subdir: whether the
+# modules are there is decided after configure, by a separate build step that
+# itself needs a finished install to find pg_config. See the script's header.
+meson.add_install_script('install_python_modules.py')

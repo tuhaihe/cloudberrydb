@@ -180,6 +180,11 @@ if not get_option('external_fts')
   input += files('gp_segment_configuration_indexing.h')
 endif
 
+# gppylib's foreign-key JSON is built from this same set of headers, which is
+# why the Makefiles keep it in one variable. Export it rather than let
+# gpMgmt/bin/gppylib/data grow a second copy of the list that can drift.
+postgres_bki_srcs = input
+
 generated_catalog_headers = custom_target('generated_catalog_headers',
   output: output_files,
   install_dir: output_install,
