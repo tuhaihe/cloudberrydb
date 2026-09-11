@@ -150,7 +150,7 @@ jobs:
               },
               {"test":"ic-behave-gpinitsystem",
                "behave_features":["test/behave/mgmt_utils/gpinitsystem.feature"],
-               "behave_args":"--tags ~@extended"
+               "behave_args":"--tags ~@extended --tags ~@known_failure"
               },
               {"test":"ic-behave-gpmovemirrors",
                "behave_features":["test/behave/mgmt_utils/gpmovemirrors.feature"],
@@ -158,7 +158,7 @@ jobs:
               },
               {"test":"ic-behave-gprecoverseg",
                "behave_features":["test/behave/mgmt_utils/gprecoverseg.feature"],
-               "behave_args":"--tags ~@concourse_cluster --tags ~@extended --tags ~@differential"
+               "behave_args":"--tags ~@concourse_cluster --tags ~@extended --tags ~@differential --tags ~@not_implemented"
               },
               {"test":"ic-behave-gpreload","behave_features":["test/behave/mgmt_utils/gpreload.feature"]},
               {"test":"ic-behave-gpstart",

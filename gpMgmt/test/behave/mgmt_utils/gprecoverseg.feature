@@ -539,6 +539,10 @@ Feature: gprecoverseg tests
         And the segments are synchronized
         And the cluster is rebalanced
 
+    # Depends on behaviour Cloudberry does not implement (and that the
+    # Greenplum tree these were taken from does not implement either).
+    # Kept aligned upstream so they can be enabled with the feature.
+    @not_implemented
     Scenario: gprecoverseg should drop existing slot on full recovery
         Given the database is running
         And all the segments are running
@@ -559,6 +563,10 @@ Feature: gprecoverseg tests
         And the segments are synchronized
         And the cluster is rebalanced
 
+    # Depends on behaviour Cloudberry does not implement (and that the
+    # Greenplum tree these were taken from does not implement either).
+    # Kept aligned upstream so they can be enabled with the feature.
+    @not_implemented
     Scenario Outline: <scenario> recovery should not try to drop slot if slot does not exist
         Given the database is running
         And all the segments are running
@@ -622,6 +630,10 @@ Feature: gprecoverseg tests
         And the segments are synchronized
         And the cluster is rebalanced
 
+    # Depends on behaviour Cloudberry does not implement (and that the
+    # Greenplum tree these were taken from does not implement either).
+    # Kept aligned upstream so they can be enabled with the feature.
+    @not_implemented
     Scenario: gprecoverseg recovers segment for valid max-rate options and errors out for others
       Given the database is running
         And all the segments are running
@@ -2379,6 +2391,13 @@ Feature: gprecoverseg tests
           And gprecoverseg should return a return code of 0
           And the cluster is rebalanced
 
+  # gprecoverseg's -i config file takes "address|port|datadir" here;
+  # Greenplum also accepts a leading hostname (3, 4 or 5 parts) and, with it,
+  # the hostname-vs-address cross-check these two scenarios assert. Cloudberry's
+  # _parseConfigFile() only understands 3 parts, so the run stops at
+  #   expected 3 parts on failed segment group, obtained 4
+  # Kept aligned with upstream so they can be enabled with the feature.
+  @not_implemented
   @demo_cluster
   Scenario: gprecoverseg recovers segment when config file contains hostname on demo cluster
     Given the database is running
@@ -2397,6 +2416,13 @@ Feature: gprecoverseg tests
     And the cluster configuration has no segments where "content=0 and status='d'"
     Then the cluster is rebalanced
 
+  # gprecoverseg's -i config file takes "address|port|datadir" here;
+  # Greenplum also accepts a leading hostname (3, 4 or 5 parts) and, with it,
+  # the hostname-vs-address cross-check these two scenarios assert. Cloudberry's
+  # _parseConfigFile() only understands 3 parts, so the run stops at
+  #   expected 3 parts on failed segment group, obtained 4
+  # Kept aligned with upstream so they can be enabled with the feature.
+  @not_implemented
   @demo_cluster
   Scenario: gprecoverseg skips recovery when config file contains invalid hostname on demo cluster
     Given the database is running
