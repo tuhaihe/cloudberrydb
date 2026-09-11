@@ -1621,6 +1621,44 @@ CREATE_GPEXTENSIONS() {
 		done
 }
 
+# Import system collations through pg_import_system_collations, and leave the
+# built-in databases in the state initdb would have left them (borrowed from
+# initdb.c:setup_collation() and initdb.c:vacuum_db()).
+#
+# initdb cannot do this itself: pg_import_system_collations() has to be
+# dispatched to the segments, so it can only run once the cluster is up.
+IMPORT_COLLATION () {
+		LOG_MSG "[INFO]:-Start Function $FUNCNAME"
+		LOG_MSG "[INFO]:-Importing system collations" 1
+
+		# temporarily allow connections to template0, so we can import collations to it.
+		$PSQL -p $GP_PORT -d postgres -A -t -c "ALTER DATABASE template0 ALLOW_CONNECTIONS on" >> $LOG_FILE 2>&1;
+		$PSQL -p $GP_PORT -d template0 -A -t -c "SELECT pg_import_system_collations('pg_catalog')" >> $LOG_FILE 2>&1;
+		ERROR_CHK $? "importing system collations to 'template0' database" 1
+		$PSQL -p $GP_PORT -d template0 -A -t -c "ANALYZE" >> $LOG_FILE 2>&1;
+		ERROR_CHK $? "ANALYZE 'template0' database" 1
+		$PSQL -p $GP_PORT -d template0 -A -t -c "VACUUM FREEZE" >> $LOG_FILE 2>&1;
+		ERROR_CHK $? "VACUUM FREEZE 'template0' database" 1
+		$PSQL -p $GP_PORT -d postgres -A -t -c "ALTER DATABASE template0 ALLOW_CONNECTIONS off" >> $LOG_FILE 2>&1;
+
+		# import to template1
+		$PSQL -p $GP_PORT -d template1 -A -t -c "SELECT pg_import_system_collations('pg_catalog')" >> $LOG_FILE 2>&1;
+		ERROR_CHK $? "importing system collations to 'template1' database" 1
+		$PSQL -p $GP_PORT -d template1 -A -t -c "ANALYZE" >> $LOG_FILE 2>&1;
+		ERROR_CHK $? "ANALYZE 'template1' database" 1
+		$PSQL -p $GP_PORT -d template1 -A -t -c "VACUUM FREEZE" >> $LOG_FILE 2>&1;
+		ERROR_CHK $? "VACUUM FREEZE 'template1' database" 1
+
+		# import to postgres
+		$PSQL -p $GP_PORT -d postgres -A -t -c "SELECT pg_import_system_collations('pg_catalog')" >> $LOG_FILE 2>&1;
+		ERROR_CHK $? "importing system collations to 'postgres' database" 1
+		$PSQL -p $GP_PORT -d postgres -A -t -c "ANALYZE" >> $LOG_FILE 2>&1;
+		ERROR_CHK $? "ANALYZE 'postgres' database" 1
+		$PSQL -p $GP_PORT -d postgres -A -t -c "VACUUM FREEZE" >> $LOG_FILE 2>&1;
+		ERROR_CHK $? "VACUUM FREEZE 'postgres' database" 1
+		LOG_MSG "[INFO]:-End Function $FUNCNAME"
+}
+
 
 FORCE_FTS_PROBE () {
     LOG_MSG "[INFO]:-Start Function $FUNCNAME"
@@ -2249,6 +2287,7 @@ STOP_QD_PRODUCTION
 START_QD_PRODUCTION
 
 CREATE_GPEXTENSIONS
+IMPORT_COLLATION
 
 if [ x"" != x"$DATABASE_NAME" ]; then
 	CREATE_DATABASE
