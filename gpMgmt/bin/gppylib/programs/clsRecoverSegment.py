@@ -387,11 +387,15 @@ class GpRecoverSegmentProgram:
             if not mirrorBuilder.recover_mirrors(gpEnv, gpArray):
                 if self.termination_requested:
                     self.logger.error("gprecoverseg process was interrupted by the user.")
+                self.logger.error("gprecoverseg failed. Please check the output for more details.")
                 sys.exit(1)
 
             if self.termination_requested:
                 self.logger.info("Not able to terminate the recovery process since it has been completed successfully.")
 
+            self.logger.info("********************************")
+            self.logger.info("Future gprecoverseg executions might remove the currently created pg_basebackup/pg_rewind/rsync "
+                             "progress files, please save these files if needed.")
             self.logger.info("********************************")
             self.logger.info("Segments successfully recovered.")
             self.logger.info("********************************")
