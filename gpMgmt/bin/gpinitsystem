@@ -1641,6 +1641,12 @@ FORCE_FTS_PROBE () {
         if [ x"$RESULT" == x"f" ]; then
         	break
         fi
+
+        # Ask FTS to probe now rather than waiting out gp_fts_probe_interval;
+        # without this the loop just re-reads an unchanged
+        # gp_segment_configuration sixty times in a couple of seconds and gives
+        # up before FTS has looked at the segments even once.
+        $PSQL -p $GP_PORT -d "$DEFAULTDB" -c "select gp_request_fts_probe_scan()" >> ${LOG_FILE} 2>&1
     done
     LOG_MSG "[INFO]:-End Function $FUNCNAME"
 }
