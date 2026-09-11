@@ -313,7 +313,7 @@ CHK_PARAMS () {
 		fi
 
 		if [ x"$ETCD_HOST_CONFIG" = x"" ] || [ x"$CLUSTER_BOOT_MODE" = x"DEMO" ]; then
-			LOG_MSG "[WARN]:-No ETCD cluster host config provided, use default configuration."
+			LOG_MSG "[INFO]:-No ETCD cluster host config provided, use default configuration."
 		else
 			ETCD_HOST_MACHINE_LIST=(`$CAT $ETCD_HOST_CONFIG`)
 			ETCD_HOST_CONFIG_NUM=${#ETCD_HOST_MACHINE_LIST[@]}
@@ -323,7 +323,7 @@ CHK_PARAMS () {
 		fi
 
 		if [ x"$FTS_HOST_CONFIG" = x"" ] || [ x"$CLUSTER_BOOT_MODE" = x"DEMO" ]; then
-			LOG_MSG "[WARN]:-No FTS cluster host config provided, use default configuration."
+			LOG_MSG "[INFO]:-No FTS cluster host config provided, use default configuration."
 		else
 			FTS_HOST_MACHINE_LIST=(`$CAT $FTS_HOST_CONFIG`)
 			FTS_HOST_CONFIG_NUM=${#FTS_HOST_MACHINE_LIST[@]}
