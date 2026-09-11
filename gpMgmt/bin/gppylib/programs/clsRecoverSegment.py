@@ -19,7 +19,7 @@
 from gppylib.mainUtils import *
 
 from optparse import OptionGroup
-import glob, os, sys, signal, shutil, time
+import glob, os, re, sys, signal, shutil, time
 from contextlib import closing
 
 from gppylib import gparray, gplog, userinput, utils
@@ -46,6 +46,10 @@ from gppylib.mainUtils import ExceptionNoStackTraceNeeded
 from gppylib.programs.clsRecoverSegment_triples import RecoveryTripletsFactory
 
 logger = gplog.get_default_logger()
+
+# Upper and lower bound for --max-rate, in kbps
+MAX_RATE_LOWER = 32
+MAX_RATE_UPPER = 1048576
 
 # -------------------------------------------------------------------------
 
@@ -112,7 +116,8 @@ class GpRecoverSegmentProgram:
                                        instance.getInterfaceHostnameWarnings(),
                                        forceoverwrite=True,
                                        progressMode=self.getProgressMode(),
-                                       parallelPerHost=self.__options.parallelPerHost)
+                                       parallelPerHost=self.__options.parallelPerHost,
+                                       maxRate=self.__options.maxRate)
 
     def syncPackages(self, new_hosts):
         # The design decision here is to squash any exceptions resulting from the
@@ -210,6 +215,14 @@ class GpRecoverSegmentProgram:
                                "primary %s    failover target: %s"
                                % (self.__getSimpleSegmentLabel(src), self.__getSimpleSegmentLabel(dest)))
 
+            if not toRecover.isFullSynchronization() and mirrorBuilder.getMaxTransferRate() is not None:
+                #
+                # Only pg_basebackup throttles, so --max-rate does nothing for
+                # incremental or differential recovery.
+                #
+                res.append(" --max-rate flag is only supported with segments undergoing Full recovery (-F). "
+                           "Other modes of recovery will use the entire available network bandwidth.")
+
         for warning in mirrorBuilder.getAdditionalWarnings():
             res.append(warning)
 
@@ -221,6 +234,35 @@ class GpRecoverSegmentProgram:
             res = dbconn.query(conn, "SELECT datname FROM PG_DATABASE WHERE datname != 'template0'")
             return res.fetchall()
 
+    def validateMaxRate(self):
+        """
+        Validate the --max-rate value supplied by the user.
+
+        The numeric part may be a whole or decimal number, with an optional
+        'k' or 'M' suffix. The effective rate must fall between 32 kbps and
+        1048576 kbps (1024 Mbps).
+        """
+        pattern = r'^\s*([\d\.]+)([a-zA-Z]?)\s*$'
+        match = re.match(pattern, self.__options.maxRate)
+        if not match:
+            raise ProgramArgumentValidationException(
+                "transfer rate {0} is not a valid value".format(self.__options.maxRate))
+
+        rateVal, rateSuffix = match.groups()
+        rateVal = float(rateVal)
+        if rateVal <= 0:
+            raise ProgramArgumentValidationException("Transfer rate must be greater than zero")
+
+        if rateSuffix == 'M':
+            rateVal *= 1024
+        elif rateSuffix and rateSuffix != 'k':
+            raise ProgramArgumentValidationException(
+                "Invalid --max-rate unit: {0}".format(rateSuffix))
+
+        if rateVal < MAX_RATE_LOWER or rateVal > MAX_RATE_UPPER:
+            raise ProgramArgumentValidationException(
+                "transfer rate {0} is out of range".format(self.__options.maxRate))
+
     def run(self):
         if self.__options.parallelDegree < 1 or self.__options.parallelDegree > gp.MAX_COORDINATOR_NUM_WORKERS:
             raise ProgramArgumentValidationException(
@@ -228,6 +270,12 @@ class GpRecoverSegmentProgram:
         if self.__options.parallelPerHost < 1 or self.__options.parallelPerHost > gp.MAX_SEGHOST_NUM_WORKERS:
             raise ProgramArgumentValidationException(
                 "Invalid parallelPerHost value provided with -b argument: %d" % self.__options.parallelPerHost)
+
+        if self.__options.outputSampleConfigFile and self.__options.maxRate:
+            self.logger.warn(" -o flag does not support the use of --max-rate, hence --max-rate will be ignored")
+
+        if self.__options.maxRate:
+            self.validateMaxRate()
 
         self.__pool = WorkerPool(self.__options.parallelDegree)
         gpEnv = GpCoordinatorEnvironment(self.__options.coordinatorDataDirectory, True)
@@ -498,6 +546,8 @@ class GpRecoverSegmentProgram:
                          dest='rebalanceSegments', help='Rebalance synchronized segments.')
         addTo.add_option('', '--hba-hostnames', action='store_true', dest='hba_hostnames',
                          help='use hostnames instead of CIDR in pg_hba.conf')
+        addTo.add_option('--max-rate', type='string', dest='maxRate', metavar='<maxRate>',
+                         help='Maximum Rate of data transfer')
 
         parser.set_defaults()
         return parser
