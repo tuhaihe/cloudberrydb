@@ -3423,16 +3423,25 @@ def step_impl(context):
             datadir = segment[3]
 
             ## check postgresql.conf
+            # Name the local copy after the dbid, not the host. Every segment
+            # of a single-host demo cluster answers to the same hostname, so a
+            # per-host name means all of them rsync onto one file -- and
+            # rsync's quick check skips the transfer when size and mtime match,
+            # which they do for segments whose postgresql.conf was written by
+            # the same gpinitsystem run and whose ports are the same number of
+            # digits. The check then reads another segment's file and reports a
+            # port mismatch that does not exist.
             remote_postgresql_conf = "%s/%s" % (datadir, 'postgresql.conf')
-            local_conf_copy = os.path.join(gp.get_coordinatordatadir(), "%s.%s" % ('postgresql.conf', hostname))
+            local_conf_copy = os.path.join(gp.get_coordinatordatadir(),
+                                           "postgresql.conf.%s.dbid%s" % (hostname, segment[0]))
             cmd = Command(name="Copy remote conf to local to diff",
                         cmdStr='rsync %s:%s %s' % (hostname, remote_postgresql_conf, local_conf_copy))
             cmd.run(validateAfter=True)
 
             dic = pgconf.readfile(filename=local_conf_copy)
             if str(dic['port']) != port:
-                raise Exception("port value in postgresql.conf of %s is incorrect. Expected:%s, given:%s" %
-                                (hostname, port, dic['port']))
+                raise Exception("port value in postgresql.conf of %s dbid %s is incorrect. Expected:%s, given:%s" %
+                                (hostname, segment[0], port, dic['port']))
     finally:
         if conn:
             conn.close()
