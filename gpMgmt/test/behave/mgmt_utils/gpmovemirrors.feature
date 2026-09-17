@@ -362,6 +362,7 @@ Feature: Tests for gpmovemirrors
 ########################### @concourse_cluster tests ###########################
 # The @concourse_cluster tag denotes the scenario that requires a remote cluster
 
+    @concourse_cluster
     Scenario: gpmovemirrors mirrors come up even if one pg_ctl_start fails
         Given the database is running
         And verify that mirror segments are in "spread" configuration

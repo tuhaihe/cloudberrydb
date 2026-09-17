@@ -1099,6 +1099,7 @@ Feature: gprecoverseg tests
     And check segment conf: postgresql.conf
     And the row count from table "test_recoverseg" in "postgres" is verified against the saved data
 
+    @concourse_cluster
     Scenario: gprecoverseg behave test requires a cluster with at least 2 hosts
         Given the database is running
         Given database "gptest" exists
