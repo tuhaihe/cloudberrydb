@@ -1531,11 +1531,18 @@ CREATE_STANDBY_QD () {
 		if [ $HBA_HOSTNAMES -eq 1 ]; then
 		    INIT_STANDBY_ARGS+=" --hba-hostnames"
 		fi
-		if [ x"$CLUSTER_BOOT_MODE" = x"PRODUCTION" ]; then
-		    export COORDINATOR_DATA_DIRECTORY=${COORDINATOR_DIRECTORY}/${SEG_PREFIX}-1;$INIT_STANDBY_PROG -s $STANDBY_HOSTNAME $INIT_STANDBY_ARGS -a -f $FTS_HOST_STRING_LIST
-		else
-		    export COORDINATOR_DATA_DIRECTORY=${COORDINATOR_DIRECTORY}/${SEG_PREFIX}-1;$INIT_STANDBY_PROG -s $STANDBY_HOSTNAME $INIT_STANDBY_ARGS -a
+		# -f takes the list of external FTS hosts, and only exists when the
+		# cluster was given one. Guard it the same way as the arguments above:
+		# CLUSTER_BOOT_MODE is PRODUCTION for every cluster whose coordinator
+		# and segments are on different hosts -- which is every real one --
+		# but FTS_HOST_STRING_LIST is empty unless -f/-F was passed to
+		# gpinitsystem, and "-f" with nothing after it makes gpinitstandby
+		# exit 2 on "-f option requires 1 argument" before it writes a line of
+		# its own log.
+		if [ x"" != x"$FTS_HOST_STRING_LIST" ]; then
+		    INIT_STANDBY_ARGS+=" -f $FTS_HOST_STRING_LIST"
 		fi
+		export COORDINATOR_DATA_DIRECTORY=${COORDINATOR_DIRECTORY}/${SEG_PREFIX}-1;$INIT_STANDBY_PROG -s $STANDBY_HOSTNAME $INIT_STANDBY_ARGS -a
 		STANDBY_RET_CODE=$?
 		if [ $STANDBY_RET_CODE -eq 0 ]; then
 			LOG_MSG "[INFO]:-Successfully completed standby coordinator initialization" 1
@@ -2000,7 +2007,7 @@ CBDB_PRECHECK() {
                 if [ $? -eq 0 ];then
                         ERROR_EXIT "[FATAL]: FTS HOST $fts has alived fts process, please cleanup the environment first."
                 fi
-                if [ -z FTS_HOST_STRING_LIST ];then
+                if [ -z "$FTS_HOST_STRING_LIST" ];then
                          FTS_HOST_STRING_LIST="$fts"
                 else
                          FTS_HOST_STRING_LIST="$FTS_HOST_STRING_LIST,$fts"
