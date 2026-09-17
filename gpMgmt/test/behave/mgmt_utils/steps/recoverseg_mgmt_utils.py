@@ -371,7 +371,12 @@ def recovery_fail_check(context, recovery_type, content_ids, utility):
         return_code = 3
 
     if recovery_type == 'incremental':
-        print_msg = 'pg_rewind: fatal'
+        # A failed pg_rewind writes two lines, "error: <what>" then
+        # "detail: Command was: ...", and gprecoverseg streams whichever is
+        # last in the progress file when it next polls -- almost always the
+        # detail. Accept either rather than depend on the timing. (Before 13
+        # there was no detail line and upstream looks for "fatal".)
+        print_msg = 'pg_rewind: (error|detail)'
         logfile_name = 'pg_rewind*'
     elif recovery_type == 'full':
         print_msg = 'pg_basebackup: error: could not access directory' #TODO also assert for the directory location here
