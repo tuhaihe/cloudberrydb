@@ -686,6 +686,7 @@ Feature: gprecoverseg tests
 
   @demo_cluster
   @concourse_cluster
+  @differential
   Scenario: gprecoverseg creates recovery_progress.file in gpAdminLogs for differential recovery of mirrors
     Given the database is running
     And all files in gpAdminLogs directory are deleted on all hosts in the cluster
@@ -970,7 +971,7 @@ Feature: gprecoverseg tests
     And user can start transactions
 
     And check if incremental recovery failed for mirrors with content 0 for gprecoverseg
-    And gprecoverseg should print "Failed to recover the following segments. You must run either gprecoverseg --differential or gprecoverseg -F for all incremental failures" to stdout
+    And gprecoverseg should print "Failed to recover the following segments. You must run gprecoverseg -F for all incremental failures" to stdout
     And check if incremental recovery was successful for mirrors with content 1,2
     And gpAdminLogs directory has "pg_rewind*" files on all segment hosts
     And gpAdminLogs directory has "gpsegsetuprecovery*" files on all segment hosts
@@ -1549,6 +1550,7 @@ Feature: gprecoverseg tests
 
   @demo_cluster
   @concourse_cluster
+  @differential
   Scenario: gprecoverseg should terminate gracefully on SIGTERM when running differential recovery
     Given the database is running
     And all the segments are running
@@ -1953,6 +1955,7 @@ Feature: gprecoverseg tests
 
   @demo_cluster
   @concourse_cluster
+  @not_implemented
   Scenario: gprecoverseg rebalance aborts and throws exception if replay lag on mirror is more than or equal to the allowed limit
       Given the database is running
         And all the segments are running
@@ -1972,6 +1975,7 @@ Feature: gprecoverseg tests
 
   @demo_cluster
   @concourse_cluster
+  @not_implemented
   Scenario: gprecoverseg errors out if invalid options are used with --disable-replay-lag
       Given the database is running
         And all the segments are running
