@@ -262,6 +262,16 @@ class GpRecoverSegmentProgram:
         if optionCnt > 1:
             raise ProgramArgumentValidationException("Only one of -i, -p, and -r may be specified")
 
+        # -o only writes out a sample configuration file describing what would
+        # be recovered; it does not recover anything, so combining it with an
+        # option that says where to recover to is a contradiction rather than a
+        # refinement.
+        if self.__options.outputSampleConfigFile:
+            if self.__options.recoveryConfigFile is not None:
+                raise ProgramArgumentValidationException("Invalid -i provided with -o argument")
+            if self.__options.rebalanceSegments:
+                raise ProgramArgumentValidationException("Invalid -r provided with -o argument")
+
         # A full resynchronisation rebuilds the mirror from its primary, which
         # is neither what -r (rebalance back to preferred roles) nor -p
         # (recover onto a different host) asks for.
