@@ -130,6 +130,19 @@ jobs:
           echo "Event type: ${{ github.event_name }}"
           echo "Test selection input: '${{ github.event.inputs.test_selection || 'all' }}'"
 
+          # 17 of the 23 suites under test/behave/mgmt_utils run here. The
+          # other six are left out on purpose:
+          #
+          #   gpcheckperf, gprecoverseg_newhost, gpssh_exkeys
+          #       every scenario in them is @concourse_cluster, so against the
+          #       single-host demo cluster this job builds there is nothing
+          #       left to run once the tag filter has been applied.
+          #   cross_subnet
+          #       needs the coordinator and the segments on separate subnets.
+          #   gpexpand, gppkg
+          #       not enabled yet; both have scenarios that are not
+          #       @concourse_cluster and could be added once they have been
+          #       run against a demo cluster.
           ALL_BEHAVE_TESTS='{
             "include": [
               {"test":"ic-behave-analyzedb","behave_features":["test/behave/mgmt_utils/analyzedb.feature"]},
