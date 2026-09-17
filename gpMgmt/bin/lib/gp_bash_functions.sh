@@ -1239,7 +1239,7 @@ PRECHECK_CBDB_CONFIG_FILE() {
 
 CLEANUP_ETCD() {
     if [ "$#" -ne 1 ];then
-        LOG_MSG "[ERROR]: RETRIVE_ETCD_CONFIG_VAL invalid params..."
+        LOG_MSG "[ERROR]: CLEANUP_ETCD invalid params..."
     fi
     local etcd_account_id=`RETRIVE_ETCD_CONFIG_VAL $ETCD_ACCOUNT_ID`
     local etcd_cluster_id=`RETRIVE_ETCD_CONFIG_VAL $ETCD_CLUSTER_ID`
@@ -1323,7 +1323,7 @@ SETUP_FTS() {
 
 CHECK_FTS () {
     ret=1
-    if [ "$#" -ne 2 ];then
+    if [ "$#" -ne 1 ];then
         LOG_MSG "[ERROR]: CHECK_FTS invalid params..."
     fi
     FTS_HOST=$1
