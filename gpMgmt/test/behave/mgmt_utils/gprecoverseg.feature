@@ -1,6 +1,7 @@
 @gprecoverseg
 Feature: gprecoverseg tests
 
+    @differential
     Scenario: differential recovery runs successfully
         Given the database is running
           And the segments are synchronized
@@ -44,6 +45,7 @@ Feature: gprecoverseg tests
 
     @demo_cluster
     @concourse_cluster
+    @differential
     Scenario: Differential recovery succeeds if previous incremental recovery failed
         Given the database is running
           And user stops all primary processes
@@ -61,6 +63,7 @@ Feature: gprecoverseg tests
 
     @demo_cluster
     @concourse_cluster
+    @differential
     Scenario: Differential recovery succeeds if previous full recovery failed
         Given the database is running
           And user stops all primary processes
@@ -578,8 +581,12 @@ Feature: gprecoverseg tests
       Examples:
         | scenario     | args               |
         | incremental  | -a                 |
-        | differential | -a --differential  |
         | full         | -aF                |
+
+      @differential
+      Examples:
+        | scenario     | args               |
+        | differential | -a --differential  |
 
     Scenario: gprecoverseg throws exception when -o flag used with invalid flags
       Given the database is running
@@ -1122,8 +1129,12 @@ Feature: gprecoverseg tests
 
       Examples:
         | scenario     | args               |
-        | differential | -a --differential  |
         | full         | -aF                |
+
+      @differential
+      Examples:
+        | scenario     | args               |
+        | differential | -a --differential  |
 
     @concourse_cluster
     Scenario: gprecoverseg full recovery testing
@@ -1202,6 +1213,7 @@ Feature: gprecoverseg tests
         Then the saved primary segment reports the same value for sql "show data_checksums" db "template1" as was saved
 
     @concourse_cluster
+    @differential
     Scenario: gprecoverseg should use the same setting for data_checksums for a differential recovery
         Given the database is running
         And results of the sql "show data_checksums" db "template1" are stored in the context
