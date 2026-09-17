@@ -158,6 +158,8 @@ def impl(context, seg):
         context.remote_pair_primary_segcid = primary_segs[0].getSegmentContentId()
         context.remote_pair_primary_host = primary_segs[0].getSegmentHostName()
         context.remote_pair_primary_datadir = primary_segs[0].getSegmentDataDirectory()
+        context.remote_pair_primary_port = primary_segs[0].getSegmentPort()
+        context.remote_pair_primary_address = primary_segs[0].getSegmentAddress()
     elif seg == "mirror":
         mirror_segs = [seg for seg in gparray.getDbList()
                        if seg.isSegmentMirror() and seg.getSegmentHostName() != platform.node()]
