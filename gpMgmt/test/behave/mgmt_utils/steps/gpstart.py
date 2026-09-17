@@ -119,6 +119,22 @@ def _make_unreachable(context, seg_type, content, utility=False):
     if not hasattr(context, 'old_hostnames'):
         context.old_hostnames = {}
     context.old_hostnames[(content, preferred_role)] = hostname
+
+    # Put the name back even if the scenario does not reach the step that
+    # normally does it. While a primary's address is invalid_host the
+    # coordinator will not accept an ordinary connection -- it cannot resolve
+    # the segment when it builds the component list -- so a scenario that dies
+    # in the middle leaves every scenario after it failing in before_scenario,
+    # against a cluster that is otherwise perfectly healthy. Utility mode still
+    # connects, which is how the name was changed in the first place.
+    def restore(content=content, preferred_role=preferred_role, hostname=hostname):
+        try:
+            change_hostname(content, preferred_role, hostname, utility=True)
+        except Exception as e:
+            print("could not restore the hostname of content %s (%s): %s"
+                  % (content, preferred_role, e))
+    context.add_cleanup(restore)
+
     change_hostname(content, preferred_role, 'invalid_host', utility)
 
     if not hasattr(context, 'down_segment_dbids'):
