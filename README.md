@@ -160,6 +160,9 @@ software:
   connection encryption, and LDAP over TLS for authentication.
 - The bundled `pgcrypto` extension provides cryptographic functions to SQL,
   using either OpenSSL or its own built-in implementations.
+- The `gpfdist` external table file server can serve over HTTPS, using OpenSSL
+  and X.509 certificates supplied through its `--ssl <certificates_directory>`
+  option.
 
 Apache Cloudberry does not ship OpenSSL itself; it links against the OpenSSL
 provided by the operating system.
