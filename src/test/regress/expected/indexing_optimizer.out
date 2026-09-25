@@ -1312,41 +1312,50 @@ NOTICE:  table has parent, setting distribution columns to match parent table
 set enable_seqscan to off;
 create index idxpart_brin on idxpart using brin(b);
 explain (costs off) select * from idxpart where b = 'abcd';
-                   QUERY PLAN                    
--------------------------------------------------
+NOTICE:  One or more columns in the following table(s) do not have statistics: idxpart
+HINT:  For non-partitioned tables, run analyze <table_name>(<column_list>). For partitioned tables, run analyze rootpartition <table_name>(<column_list>). See log for columns missing statistics.
+                      QUERY PLAN                       
+-------------------------------------------------------
  Gather Motion 3:1  (slice1; segments: 3)
-   ->  Bitmap Heap Scan on idxpart1 idxpart
+   ->  Dynamic Bitmap Heap Scan on idxpart
+         Number of partitions to scan: 1 (out of 1)
          Recheck Cond: (b = 'abcd'::text)
-         ->  Bitmap Index Scan on idxpart1_b_idx
+         Filter: (b = 'abcd'::text)
+         ->  Dynamic Bitmap Index Scan on idxpart_brin
                Index Cond: (b = 'abcd'::text)
- Optimizer: Postgres query optimizer
-(6 rows)
+ Optimizer: GPORCA
+(8 rows)
 
 drop index idxpart_brin;
 create index idxpart_spgist on idxpart using spgist(b);
 explain (costs off) select * from idxpart where b = 'abcd';
-                   QUERY PLAN                    
--------------------------------------------------
+NOTICE:  One or more columns in the following table(s) do not have statistics: idxpart
+HINT:  For non-partitioned tables, run analyze <table_name>(<column_list>). For partitioned tables, run analyze rootpartition <table_name>(<column_list>). See log for columns missing statistics.
+                     QUERY PLAN                     
+----------------------------------------------------
  Gather Motion 3:1  (slice1; segments: 3)
-   ->  Bitmap Heap Scan on idxpart1 idxpart
-         Recheck Cond: (b = 'abcd'::text)
-         ->  Bitmap Index Scan on idxpart1_b_idx
-               Index Cond: (b = 'abcd'::text)
- Optimizer: Postgres query optimizer
-(6 rows)
+   ->  Dynamic Seq Scan on idxpart
+         Number of partitions to scan: 1 (out of 1)
+         Filter: (b = 'abcd'::text)
+ Optimizer: GPORCA
+(5 rows)
 
 drop index idxpart_spgist;
 create index idxpart_gin on idxpart using gin(c);
 explain (costs off) select * from idxpart where c @> array[42];
-                     QUERY PLAN                     
-----------------------------------------------------
+NOTICE:  One or more columns in the following table(s) do not have statistics: idxpart
+HINT:  For non-partitioned tables, run analyze <table_name>(<column_list>). For partitioned tables, run analyze rootpartition <table_name>(<column_list>). See log for columns missing statistics.
+                      QUERY PLAN                      
+------------------------------------------------------
  Gather Motion 3:1  (slice1; segments: 3)
-   ->  Bitmap Heap Scan on idxpart1 idxpart
+   ->  Dynamic Bitmap Heap Scan on idxpart
+         Number of partitions to scan: 1 (out of 1)
          Recheck Cond: (c @> '{42}'::integer[])
-         ->  Bitmap Index Scan on idxpart1_c_idx
+         Filter: (c @> '{42}'::integer[])
+         ->  Dynamic Bitmap Index Scan on idxpart_gin
                Index Cond: (c @> '{42}'::integer[])
- Optimizer: Postgres query optimizer
-(6 rows)
+ Optimizer: GPORCA
+(8 rows)
 
 drop index idxpart_gin;
 reset enable_seqscan;
