@@ -20,7 +20,8 @@
 #
 # PostgreSQL 16 introduced meson as a second build system alongside
 # autoconf/make. This workflow builds Cloudberry with meson, brings up a real
-# demo cluster on the result, and exercises the MPP paths against it.
+# demo cluster on the result, and runs the regression suites against it -- the
+# same Makefile targets build-cloudberry.yml runs against the autoconf build.
 #
 # This does NOT replace the autoconf build. Until the two are proven
 # equivalent, build-cloudberry.yml remains the authoritative build; this
@@ -29,8 +30,9 @@
 #
 # Shape, mirroring build-cloudberry.yml:
 #
-#   check-skip -> install-parity -> report
-#              -> build (matrix) -> cluster-test -> report
+#   check-skip -> install-parity ----------------------------> report
+#              -> build (matrix) -> cluster-test --------------> report
+#                                -> test (one job per suite) --> report
 #
 # install-parity is static and finishes in seconds, so the most common porting
 # mistake -- a file added to a Makefile and not to the meson.build beside it --
@@ -53,11 +55,15 @@
 # postgres. Add a third configuration if that link ever needs guarding; until
 # then it is not worth a third full build of the tree.
 #
-# Regression suites are NOT run here yet. src/test/regress and friends are
-# make-driven and include src/Makefile.global from the source tree, which only
-# a configure run produces, so they cannot execute against a meson-only tree.
-# Porting them is separate work; this workflow is structured so those jobs can
-# be added alongside cluster-test once that lands.
+# The regression suites stay make-driven: installcheck-good and the rest are
+# defined in Makefiles, and a second definition in meson would be a copy to
+# keep in step, whose passing proves nothing about the original. What the
+# Makefiles need is an in-tree configured build -- src/Makefile.global,
+# ./pg_regress, ./regress.so -- and every piece of that is a meson build
+# product. meson-test-harness.sh carries them from the build job into the test
+# job's checkout; see its header for the details. The suites are
+# build-cloudberry.yml's, in its entry format; the test job lists the few not
+# moved across yet.
 #
 # Option mapping, against the reference configure line in coverity.yml:
 #
@@ -70,6 +76,7 @@
 #   --enable-mapreduce          -> -Dmapreduce=enabled
 #   --enable-pax                -> -Dpax=enabled
 #   --with-diskquota            -> -Ddiskquota=enabled
+#   --with-gp-stats-collector   -> -Dgp_stats_collector=enabled
 #   --enable-tap-tests          -> -Dtap_tests=enabled
 #   --with-gssapi               -> -Dgssapi=enabled
 #   --with-ldap                 -> -Dldap=enabled
@@ -84,12 +91,6 @@
 #   --with-pgport=5432          -> -Dpgport=5432
 #   --with-includes=...         -> -Dextra_include_dirs=...
 #   --with-libraries=...        -> -Dextra_lib_dirs=...
-#
-# Not enabled here: --with-gp-stats-collector. It is wired up, but
-# src/hook_wrappers.h declares test_uds_receive() as returning int64_t while
-# the definition returns PG's int64. Those are the same type on 64-bit Linux
-# and differ on macOS, so it could not be verified locally; enable it once
-# someone has confirmed it builds.
 #
 # Deliberately dropped: --with-pythonsrc-ext downloads psutil / PyYAML /
 # PyGreSQL from PyPI during `make install`, which has no honest meson
@@ -201,6 +202,7 @@ jobs:
             -Dmapreduce=enabled
             -Ddiskquota=enabled
             -Dpax=enabled
+            -Dgp_stats_collector=enabled
             -Dtap_tests=enabled
             -Dgssapi=enabled
             -Dldap=enabled
@@ -269,7 +271,7 @@ jobs:
 
     - name: Restore cached gpMgmt Python sources
       if: matrix.upload
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         # Only the tarballs. The unpacked trees and their build output live in
         # the same directory and are worthless to cache -- they are rebuilt
@@ -432,16 +434,36 @@ jobs:
 
     - name: Upload install tree
       if: matrix.upload
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: meson-install
         path: cloudberry-meson-install.tar.gz
         retention-days: 3
         if-no-files-found: error
 
+    - name: Package test harness
+      if: matrix.upload
+      run: |
+        set -euox pipefail
+        # pg_regress, regress.so, the libpq test clients and the rest of what
+        # the suites' Makefiles would otherwise compile, plus the rendered
+        # Makefile.global -- see meson-test-harness.sh for why.
+        su gpadmin -c "cd ${GITHUB_WORKSPACE} && \
+          devops/build/automation/cloudberry/scripts/meson-test-harness.sh \
+          pack build-meson cloudberry-meson-test-harness.tar.gz"
+
+    - name: Upload test harness
+      if: matrix.upload
+      uses: actions/upload-artifact@v7
+      with:
+        name: meson-test-harness
+        path: cloudberry-meson-test-harness.tar.gz
+        retention-days: 3
+        if-no-files-found: error
+
     - name: Upload meson logs on failure
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: meson-logs-${{ matrix.name }}
         path: |
@@ -482,7 +504,7 @@ jobs:
         fi
 
     - name: Download install tree
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: meson-install
 
@@ -502,7 +524,7 @@ jobs:
 
     - name: Upload cluster logs on failure
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: meson-cluster-logs
         path: |
@@ -513,10 +535,270 @@ jobs:
         if-no-files-found: ignore
 
   # ------------------------------------------------------------------
+  # The regression suites, run against the meson build the same way
+  # build-cloudberry.yml runs them against the autoconf one: the same
+  # Makefile targets, the same demo cluster script, the same test runner and
+  # result parser. Entries use that workflow's shape, so a suite can be moved
+  # between the two by copying it.
+  #
+  # What differs is where the build products come from. The suites expect an
+  # in-tree configured build; meson-test-harness.sh lays the meson build's
+  # harness into this checkout to make one, and turns each "dir:target" into
+  # make arguments that stop make rebuilding what meson already built.
+  #
+  # Every build-cloudberry.yml entry is here except these, each for a reason
+  # of its own rather than because it fails:
+  #
+  #   pax-*             PAX's suites run its CMake-built test binaries, which
+  #                     the harness does not carry
+  #   ic-diskquota      its installcheck is a CMake project that re-runs make
+  #                     in src/test/isolation2 from inside cmake, where the
+  #                     harness's -o flags do not reach, so make recompiles
+  #   ic-datalake-fdw   needs Arrow and Parquet installed and a PGXS build of
+  #                     the extension, which that workflow's step does
+  #   ic-singlenode     src/test/singlenode_* build their own regress.so and
+  #                     pg_isolation2_regress, which meson does not build yet
+  #   ic-resgroup-v2    cgroup v2 set up inside the container
+  #
+  # These are the next to move. Most need the harness or the test job taught
+  # something build-cloudberry.yml gets for free from a full in-tree build.
+  test:
+    name: ${{ matrix.test }}
+    runs-on: ubuntu-22.04
+    needs: [check-skip, build]
+    if: needs.check-skip.outputs.should_skip != 'true'
+    timeout-minutes: 120
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - test: ic-good-opt-off
+          make_configs: [src/test/regress:installcheck-good]
+          optimizer: 'off'
+        - test: ic-good-opt-on
+          make_configs: [src/test/regress:installcheck-good]
+          optimizer: 'on'
+        - test: ic-isolation2
+          make_configs: [src/test/isolation2:installcheck-isolation2]
+        - test: ic-contrib
+          make_configs:
+          - contrib/auto_explain:installcheck
+          - contrib/amcheck:installcheck
+          - contrib/citext:installcheck
+          - contrib/btree_gin:installcheck
+          - contrib/btree_gist:installcheck
+          - contrib/dblink:installcheck
+          - contrib/dict_int:installcheck
+          - contrib/dict_xsyn:installcheck
+          - contrib/extprotocol:installcheck
+          - contrib/file_fdw:installcheck
+          - contrib/formatter_fixedwidth:installcheck
+          - contrib/hstore:installcheck
+          - contrib/indexscan:installcheck
+          - contrib/interconnect:installcheck
+          - contrib/pg_trgm:installcheck
+          - contrib/pgcrypto:installcheck
+          - contrib/pgstattuple:installcheck
+          - contrib/tablefunc:installcheck
+          - contrib/try_convert:installcheck
+          - contrib/passwordcheck:installcheck
+          - contrib/pg_buffercache:installcheck
+          - contrib/sslinfo:installcheck
+        - test: ic-gpcontrib
+          make_configs:
+          - gpcontrib/orafce:installcheck
+          - gpcontrib/zstd:installcheck
+          - gpcontrib/gp_sparse_vector:installcheck
+          - gpcontrib/gp_toolkit:installcheck
+          - gpcontrib/gp_exttable_fdw:installcheck
+          - gpcontrib/gp_internal_tools:installcheck
+        - test: gpcontrib-gp-relaccess-stats
+          make_configs: [gpcontrib/gp_relaccess_stats:installcheck]
+          extension: gp_relaccess_stats
+          shared_preload_libraries: gp_relaccess_stats
+        - test: gpcontrib-gp-stats-collector
+          make_configs: [gpcontrib/gp_stats_collector:installcheck]
+          extension: gp_stats_collector
+        - test: gpcontrib-gp-relsizes-stats
+          make_configs: [gpcontrib/gp_relsizes_stats:installcheck]
+          extension: gp_relsizes_stats
+          shared_preload_libraries: gp_relsizes_stats
+        - test: ic-fixme
+          make_configs: [src/test/regress:installcheck-fixme]
+        - test: ic-isolation2-hot-standby
+          make_configs: [src/test/isolation2:installcheck-hot-standby]
+        - test: ic-isolation2-crash
+          make_configs: [src/test/isolation2:installcheck-isolation2-crash]
+        - test: ic-parallel-retrieve-cursor
+          make_configs: [src/test/isolation2:installcheck-parallel-retrieve-cursor]
+        - test: ic-expandshrink
+          make_configs: [src/test/isolation2:installcheck-expandshrink]
+        - test: ic-cbdb-parallel
+          make_configs: [src/test/regress:installcheck-cbdb-parallel]
+        - test: ic-orca-parallel
+          make_configs: [src/test/regress:installcheck-orca-parallel]
+        - test: ic-recovery
+          make_configs: [src/test/recovery:installcheck]
+
+    container:
+      image: apache/incubator-cloudberry:cbdb-build-rocky9-latest
+      options: >-
+        --user root
+        --hostname cdw
+        --shm-size=2gb
+
+    env:
+      SRC_DIR: ${{ github.workspace }}
+      BUILD_DESTINATION: /usr/local/cloudberry-db
+
+    steps:
+    - name: Checkout Apache Cloudberry
+      uses: actions/checkout@v7
+      with:
+        # Nothing is compiled here, as in cluster-test.
+        fetch-depth: 1
+        submodules: false
+
+    - name: Environment initialization
+      run: |
+        if ! su - gpadmin -c "/tmp/init_system.sh"; then
+          echo "::error::Container initialization failed"
+          exit 1
+        fi
+
+    - name: Download install tree
+      uses: actions/download-artifact@v8
+      with:
+        name: meson-install
+
+    - name: Download test harness
+      uses: actions/download-artifact@v8
+      with:
+        name: meson-test-harness
+
+    - name: Install and lay out the harness
+      run: |
+        set -euox pipefail
+        tar -C "$(dirname ${BUILD_DESTINATION})" -xzf cloudberry-meson-install.tar.gz
+        chown -R gpadmin:gpadmin "${BUILD_DESTINATION}" "${SRC_DIR}"
+        su gpadmin -c "cd ${SRC_DIR} && \
+          devops/build/automation/cloudberry/scripts/meson-test-harness.sh \
+          unpack cloudberry-meson-test-harness.tar.gz ${SRC_DIR}"
+        mkdir -p build-logs/details
+        chown -R gpadmin:gpadmin build-logs
+
+    - name: Create demo cluster
+      run: |
+        set -eo pipefail
+        # A module preloaded here has to exist for the cluster to start; the
+        # meson install already has every one these entries name.
+        EXTRA_CONF=""
+        if [[ -n "${{ matrix.shared_preload_libraries }}" ]]; then
+          EXTRA_CONF="shared_preload_libraries='${{ matrix.shared_preload_libraries }}'"
+        fi
+        # The script build-cloudberry.yml uses. It resolves the tree as
+        # ${SRC_DIR}/../cloudberry, which is this checkout.
+        su - gpadmin -c "cd ${SRC_DIR} && NUM_PRIMARY_MIRROR_PAIRS=3 \
+          BLDWRAP_POSTGRES_CONF_ADDONS=\"${EXTRA_CONF}\" \
+          SRC_DIR=${SRC_DIR} BUILD_DESTINATION=${BUILD_DESTINATION} \
+          ${SRC_DIR}/devops/build/automation/cloudberry/scripts/create-cloudberry-demo-cluster.sh" \
+          2>&1 | tee -a build-logs/details/create-cloudberry-demo-cluster.log
+
+    - name: Create extension
+      if: matrix.extension
+      run: |
+        set -eo pipefail
+        # As build-cloudberry.yml does for the same entries, where each
+        # extension has a case arm of its own; the three are identical.
+        su - gpadmin -c "source ${BUILD_DESTINATION}/cloudberry-env.sh && \
+          source ${SRC_DIR}/gpAux/gpdemo/gpdemo-env.sh && \
+          gpconfig -c shared_preload_libraries -v '${{ matrix.extension }}' && \
+          gpstop -ra && \
+          echo 'CREATE EXTENSION IF NOT EXISTS ${{ matrix.extension }}; \
+                SHOW shared_preload_libraries; \
+                TABLE pg_extension;' | psql postgres"
+
+    - name: "Run tests: ${{ matrix.test }}"
+      shell: bash {0}
+      run: |
+        set -o pipefail
+        PG_OPTS=""
+        if [[ -n "${{ matrix.optimizer }}" ]]; then
+          PG_OPTS="-c optimizer=${{ matrix.optimizer }}"
+        fi
+        HARNESS=${SRC_DIR}/devops/build/automation/cloudberry/scripts/meson-test-harness.sh
+
+        overall=0
+        i=0
+        {
+          echo "### ${{ matrix.test }}"
+          echo
+          echo "| Configuration | Result | Total | Failed | Ignored |"
+          echo "| --- | --- | --- | --- | --- |"
+        } >> "$GITHUB_STEP_SUMMARY"
+        for config in ${{ join(matrix.make_configs, ' ') }}; do
+          IFS=':' read -r dir target <<< "${config}"
+          args=$("${HARNESS}" make-args "${dir}" "${target}")
+          log="build-logs/details/make-${{ matrix.test }}-config${i}.log"
+          echo "=== make -C ${dir} ${args}   (PGOPTIONS=${PG_OPTS}) ==="
+
+          su - gpadmin -c "cd ${SRC_DIR} && \
+               MAKE_NAME='${{ matrix.test }}-config${i}' \
+               MAKE_TARGET='${args}' \
+               MAKE_DIRECTORY='-C ${dir}' \
+               PGOPTIONS='${PG_OPTS}' \
+               SRC_DIR='${SRC_DIR}' BUILD_DESTINATION='${BUILD_DESTINATION}' \
+               ${SRC_DIR}/devops/build/automation/cloudberry/scripts/test-cloudberry.sh" \
+               2>&1 | tee "${log}"
+          rc=${PIPESTATUS[0]}
+
+          # The same parser build-cloudberry.yml uses.
+          MAKE_NAME="${{ matrix.test }}-config${i}" \
+            ${SRC_DIR}/devops/build/automation/cloudberry/scripts/parse-test-results.sh "${log}" >/dev/null
+          . ./test_results.txt 2>/dev/null || true
+          if [[ ${rc} -ne 0 ]]; then
+            overall=1
+            echo "::error::make -C ${dir} ${target} failed"
+            result="failed"
+          else
+            result="passed"
+          fi
+          echo "| \`${dir}:${target}\` | ${result} | ${TOTAL_TESTS:-?} | ${FAILED_TESTS:-?} | ${IGNORED_TESTS:-?} |" \
+            >> "$GITHUB_STEP_SUMMARY"
+          unset TOTAL_TESTS FAILED_TESTS IGNORED_TESTS
+          i=$((i + 1))
+        done
+        exit ${overall}
+
+    - name: Show regression diffs
+      if: failure()
+      run: |
+        for f in $(find ${SRC_DIR}/src/test ${SRC_DIR}/contrib ${SRC_DIR}/gpcontrib \
+                     -name regression.diffs 2>/dev/null); do
+          echo "::group::${f}"
+          head -500 "${f}"
+          echo "::endgroup::"
+        done
+
+    - name: Upload test logs
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: meson-test-logs-${{ matrix.test }}
+        path: |
+          build-logs/
+          **/regression.diffs
+          **/regression.out
+          gpAux/gpdemo/datadirs/*/*/log/
+        retention-days: 7
+        if-no-files-found: ignore
+
+  # ------------------------------------------------------------------
   report:
     name: Report
     runs-on: ubuntu-22.04
-    needs: [check-skip, install-parity, build, cluster-test]
+    needs: [check-skip, install-parity, build, cluster-test, test]
     if: always() && needs.check-skip.outputs.should_skip != 'true'
     steps:
     - name: Summarise
@@ -524,6 +806,7 @@ jobs:
         PARITY="${{ needs.install-parity.result }}"
         BUILD="${{ needs.build.result }}"
         CLUSTER="${{ needs.cluster-test.result }}"
+        TEST="${{ needs.test.result }}"
         {
           echo "## Meson build"
           echo
@@ -532,10 +815,11 @@ jobs:
           echo "| install-parity | ${PARITY} |"
           echo "| build (all configurations) | ${BUILD} |"
           echo "| cluster-test | ${CLUSTER} |"
+          echo "| test (all suites) | ${TEST} |"
         } >> "$GITHUB_STEP_SUMMARY"
         if [ "${PARITY}" != "success" ] || [ "${BUILD}" != "success" ] \
-           || [ "${CLUSTER}" != "success" ]; then
-          echo "::error::meson workflow failed (install-parity=${PARITY} build=${BUILD} cluster-test=${CLUSTER})"
+           || [ "${CLUSTER}" != "success" ] || [ "${TEST}" != "success" ]; then
+          echo "::error::meson workflow failed (install-parity=${PARITY} build=${BUILD} cluster-test=${CLUSTER} test=${TEST})"
           exit 1
         fi
         echo "All meson jobs passed"
