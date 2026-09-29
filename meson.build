@@ -816,6 +816,9 @@ cpp_needed = not orcaopt.disabled() \
   or get_option('gpcloud').enabled() \
   or get_option('pax').enabled()
 have_cpp = add_languages('cpp', required: cpp_needed, native: false)
+if have_cpp
+  cpp = meson.get_compiler('cpp')
+endif
 
 # Xerces-C, ORCA's only external dependency.
 #
@@ -2005,7 +2008,13 @@ common_functional_flags = [
 ]
 
 cflags += cc.get_supported_arguments(common_functional_flags)
-if llvm.found()
+# Upstream compiles C++ only for the LLVM JIT, and so gives C++ these flags
+# only then. Cloudberry's ORCA, gpcloud and gp_stats_collector are C++ whether
+# or not LLVM is in use, and configure puts -fno-strict-aliasing and -fwrapv in
+# their CXXFLAGS: without them the same C++ compiles to different code. The
+# warning flags below follow configure's CXXFLAGS the same way. (PAX is C++
+# too, but autoconf builds it with CMake; see its meson.build.)
+if have_cpp
   cxxflags += cpp.get_supported_arguments(common_functional_flags)
 endif
 
@@ -2029,8 +2038,14 @@ common_warning_flags = [
 ]
 
 cflags_warn += cc.get_supported_arguments(common_warning_flags)
-if llvm.found()
-  cxxflags_warn += cpp.get_supported_arguments(common_warning_flags)
+if have_cpp
+  # All but -Werror=vla, which configure gives C alone ("-Wvla is not
+  # applicable for C++"), and which gpopt's C++ does not build under.
+  foreach w : common_warning_flags
+    if w != '-Werror=vla'
+      cxxflags_warn += cpp.get_supported_arguments(w)
+    endif
+  endforeach
 endif
 
 # Upstream enables -Wdeclaration-after-statement here. Cloudberry does not:
@@ -3876,7 +3891,7 @@ if meson.version().version_compare('>=0.57')
     section: 'Compiler Flags',
   )
 
-  if llvm.found()
+  if have_cpp
     summary(
       {
         'C++ compiler': '@0@ @1@'.format(cpp.get_id(), cpp.version()),

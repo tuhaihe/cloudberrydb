@@ -153,12 +153,21 @@ pax_inc = include_directories(
   'src/cpp/contrib/tabulate/include',
 )
 
+# The autoconf build compiles PAX with this directory's CMake project, not
+# with configure's CXXFLAGS: no -fno-strict-aliasing or -fwrapv (CMakeLists.txt
+# warns with -Wstrict-aliasing instead), and none of configure's warning flags.
+# Undo the project-wide C++ flags that build does not have, so PAX compiles to
+# the same code either way, and keeps quiet about the format attributes its
+# CMake build never asks about.
+pax_cpp_args = ['-fstrict-aliasing', '-fno-wrapv', '-Wno-missing-format-attribute']
+
 pax = shared_module('pax',
   pax_sources,
   pax_proto_sources,
   include_directories: pax_inc,
   override_options: ['cpp_std=c++17'],
   kwargs: contrib_mod_args + {
+    'cpp_args': contrib_mod_args.get('cpp_args', []) + pax_cpp_args,
     'dependencies': contrib_mod_args['dependencies'] + pax_deps,
   },
 )

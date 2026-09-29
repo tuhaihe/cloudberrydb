@@ -122,15 +122,23 @@ pgxs_kv = {
 if llvm.found()
   pgxs_kv += {
     'CLANG': clang.path(),
-    'CXX': ' '.join(cpp.cmd_array()),
     'LLVM_BINPATH': llvm_binpath,
   }
 else
   pgxs_kv += {
     'CLANG': '',
-    'CXX': '',
     'LLVM_BINPATH': '',
   }
+endif
+
+# C++ extensions build through PGXS whether or not LLVM is in use. configure
+# appends -std=c++14 to CXX itself (AX_CXX_COMPILE_STDCXX, for ORCA and
+# gpcloud), so that is the standard a PGXS extension gets by default; ORCA's
+# meson.build pins the same one as an option.
+if have_cpp
+  pgxs_kv += {'CXX': ' '.join(cpp.cmd_array() + ['-std=c++14'])}
+else
+  pgxs_kv += {'CXX': ''}
 endif
 
 pgxs_bins = {
