@@ -306,6 +306,12 @@ foreach k, v : {
   # dropped in the meson build: the autoconf path downloads Python packages
   # at build time, which has no honest meson equivalent
   'with_pythonsrc_ext': false,
+  # --enable-datalake-fdw is off by default and the autoconf CI does not turn
+  # it on either: it builds contrib/datalake_fdw with PGXS against the
+  # installed server, because the module needs Arrow and Parquet and nothing
+  # else does. The meson build does not build it in tree, so say so here; it
+  # is built the same way, through this very Makefile.global.
+  'enable_datalake_fdw': false,
 }
   pgxs_cdata.set(k, v ? 'yes' : 'no')
 endforeach

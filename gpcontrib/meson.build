@@ -15,13 +15,13 @@
 # permissions and limitations under the License.
 
 # Extensions built unconditionally, matching the base recurse_targets list in
-# gpcontrib/Makefile. The flag-gated ones (gpcloud, gpmapreduce, orafce,
-# diskquota, zstd, gp_stats_collector, pxf_fdw and the debug set) are not
-# wired up yet.
+# gpcontrib/Makefile. The flag-gated ones follow, each under the option that
+# stands in for its configure flag.
 subdir('gp_distribution_policy')
 subdir('gp_exttable_fdw')
 subdir('gp_internal_tools')
 subdir('gp_legacy_string_agg')
+subdir('gp_relaccess_stats')
 subdir('gp_relsizes_stats')
 subdir('gp_sparse_vector')
 subdir('gp_toolkit')
