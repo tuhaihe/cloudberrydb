@@ -13,20 +13,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 # implied.  See the License for the specific language governing
 # permissions and limitations under the License.
-
-# MODULE_big = gp_zstd_compression (note: differs from the directory name)
-gp_zstd_compression = shared_module('gp_zstd_compression',
-  files('zstd_compression.c'),
-  kwargs: contrib_mod_args + {
-    'dependencies': contrib_mod_args['dependencies'] + [zstd],
-  },
+try_convert = shared_module('try_convert',
+  files('try_convert.c'),
+  kwargs: contrib_mod_args,
 )
-contrib_targets += gp_zstd_compression
+contrib_targets += try_convert
 
-# Not an extension script: the Makefile installs it into cdb_init.d, which
-# initdb runs, and it is what registers zstd in pg_compression. Without it
-# the module is installed but every table asking for compresstype=zstd fails
-# with "unknown compress type".
-install_data('zstd_compression.sql',
-  install_dir: dir_data / 'cdb_init.d',
+install_data(
+  'try_convert.control',
+  'try_convert--1.0.sql',
+  kwargs: contrib_data_args,
 )

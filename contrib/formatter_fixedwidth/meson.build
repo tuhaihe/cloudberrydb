@@ -13,20 +13,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 # implied.  See the License for the specific language governing
 # permissions and limitations under the License.
-
-# MODULE_big = gp_zstd_compression (note: differs from the directory name)
-gp_zstd_compression = shared_module('gp_zstd_compression',
-  files('zstd_compression.c'),
+# The fixed-width formatter for external tables. Its SQL is not an extension
+# script: the Makefile installs it into cdb_init.d, which initdb runs.
+fixedwidth = shared_module('fixedwidth',
+  files('fixedwidth.c'),
   kwargs: contrib_mod_args + {
-    'dependencies': contrib_mod_args['dependencies'] + [zstd],
+    'dependencies': contrib_mod_args['dependencies'] + [libpq],
   },
 )
-contrib_targets += gp_zstd_compression
+contrib_targets += fixedwidth
 
-# Not an extension script: the Makefile installs it into cdb_init.d, which
-# initdb runs, and it is what registers zstd in pg_compression. Without it
-# the module is installed but every table asking for compresstype=zstd fails
-# with "unknown compress type".
-install_data('zstd_compression.sql',
+install_data('fixedwidth.sql',
   install_dir: dir_data / 'cdb_init.d',
 )

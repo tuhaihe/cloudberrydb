@@ -118,6 +118,11 @@ for b in gpinitsystem gpstart gpstop gpstate; do
 done
 [ -f "${PREFIX}/bin/lib/gpdemo/demo_cluster.sh" ] || fail "missing gpdemo scripts"
 echo "  ok  bin/lib/gpdemo"
+# Generated at install time by parsing guc.c, so no static check sees it;
+# without it gpconfig validates nothing and warns on every call.
+[ -s "${PREFIX}/share/greenplum/gucs_disallowed_in_file.txt" ] \
+  || fail "missing share/greenplum/gucs_disallowed_in_file.txt"
+echo "  ok  share/greenplum/gucs_disallowed_in_file.txt"
 
 echo "== checking generated catalog data =="
 for f in system_views_gp.sql cdb_init.d/cdb_schema.sql postgres.bki; do

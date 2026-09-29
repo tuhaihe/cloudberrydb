@@ -158,6 +158,12 @@ header_subdirs = [
   'utils',
   'port',
   'portability',
+  # Cloudberry's, as src/include/Makefile lists them. Without cdb/ no extension
+  # can be compiled against a meson install at all: nodes/primnodes.h includes
+  # cdb/cdbpathlocus.h and utils/snapshot.h includes
+  # cdb/cdbdistributedsnapshot.h.
+  'cdb',
+  'task',
 ]
 
 # XXX: installing headers this way has the danger of installing editor files
