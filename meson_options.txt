@@ -2,14 +2,19 @@
 
 # Data layout influencing options
 
+# Cloudberry's configure.ac defaults both block sizes to 32 kB rather than
+# upstream's 8. They are on-disk format: a data directory initialised by a
+# build with one value cannot be opened by a build with another, so these must
+# match configure.ac or a meson build and an autoconf build of the same release
+# cannot share a cluster.
 option('blocksize', type: 'combo',
   choices: ['1', '2', '4', '8', '16', '32'],
-  value: '8',
+  value: '32',
   description: 'Relation block size, in kilobytes')
 
 option('wal_blocksize', type: 'combo',
   choices: ['1', '2', '4', '8', '16', '32', '64'],
-  value: '8',
+  value: '32',
   description: 'WAL block size, in kilobytes')
 
 option('segsize', type: 'integer', value: 1,
