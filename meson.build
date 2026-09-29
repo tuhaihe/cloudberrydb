@@ -691,7 +691,12 @@ if not gssapiopt.disabled()
       args: test_c_args, include_directories: postgres_inc)
     cdata.set('ENABLE_GSS', 1)
 
-    krb_srvtab = 'FILE:/@0@/krb5.keytab)'.format(get_option('sysconfdir'))
+    # Upstream's line reads 'FILE:/@0@/krb5.keytab)': a stray parenthesis,
+    # and a leading slash that turns the relative sysconfdir into /etc
+    # rather than the prefix's etc. configure passes
+    # FILE:$(sysconfdir)/krb5.keytab, which is what krb_server_keyfile
+    # should default to.
+    krb_srvtab = 'FILE:@0@/krb5.keytab'.format(dir_prefix / get_option('sysconfdir'))
     cdata.set_quoted('PG_KRB_SRVTAB', krb_srvtab)
   elif gssapiopt.enabled()
     error('''could not find function 'gss_store_cred_into' required for GSSAPI''')
@@ -3057,6 +3062,66 @@ endif
 cdata.set_quoted('GP_VERSION', gp_version_long)
 cdata.set_quoted('GP_MAJORVERSION', gp_majorversion)
 cdata.set('GP_VERSION_NUM', gp_version_num)
+
+# configure.ac's AC_INIT names Apache Cloudberry, not PostgreSQL, and the
+# PACKAGE_* macros come from it: they are what every client's --help prints
+# as the home page and the address to report bugs to. Read them out of
+# AC_INIT rather than copy them here, so the two build systems cannot drift.
+ac_init = run_command(python, '-c', '''
+import re, sys
+m = re.search(r"^AC_INIT\(\[([^]]*)\], \[([^]]*)\], \[([^]]*)\], \[([^]]*)\], \[([^]]*)\]\)",
+              open(sys.argv[1]).read(), re.M)
+name, version, bugreport, tarname, url = m.groups()
+# autoconf's default tarname: lowercased, spaces to dashes.
+tarname = tarname or re.sub(r"[^a-z0-9_]+", "-", name.lower())
+# PG_MINORVERSION as configure computes it -- from PACKAGE_VERSION, which is
+# Cloudberry's version, not PG_PACKAGE_VERSION. That makes it 0 for every
+# release so far, and PG_VERSION_NUM 160000 for a 16.9 code base. It looks like
+# an oversight in configure.ac (PG_MAJORVERSION, a line above it, does use
+# PG_PACKAGE_VERSION), but it is what autoconf builds ship, and extensions
+# compare against it, so the meson build reports the same until configure.ac
+# is changed.
+minor = re.match(r".*\.([0-9]+)", version)
+print("\n".join([name, version, bugreport, tarname, url,
+                 minor.group(1) if minor else "0"]))
+''', meson.current_source_dir() / 'configure.ac', check: true).stdout().strip().split('\n')
+
+cdata.set_quoted('PACKAGE_NAME', ac_init[0])
+cdata.set_quoted('PACKAGE_VERSION', ac_init[1])
+cdata.set_quoted('PACKAGE_BUGREPORT', ac_init[2])
+cdata.set_quoted('PACKAGE_TARNAME', ac_init[3])
+cdata.set_quoted('PACKAGE_URL', ac_init[4])
+cdata.set_quoted('PACKAGE_STRING', '@0@ @1@'.format(ac_init[0], ac_init[1]))
+pg_url = ac_init[4]
+pg_version_minor = ac_init[5].to_int()
+pg_version_num = (pg_version_major * 10000) + pg_version_minor
+cdata.set('PG_MINORVERSION_NUM', pg_version_minor)
+cdata.set('PG_VERSION_NUM', pg_version_num)
+
+# configure.ac, verbatim in intent: "In GPDB, float4 and float8 are always
+# passed by value. There is GPDB-specific code that assumes that in various
+# places, so it's not configurable." Upstream dropped USE_FLOAT4_BYVAL in
+# PostgreSQL 13, so upstream's meson.build never defines it -- and a dozen
+# Cloudberry code paths test `#ifndef USE_FLOAT4_BYVAL` and take the
+# pass-by-reference branch. index_store_float8_orderby_distances() is one:
+# it pfree()s a float4 datum that is a value, and every GiST distance
+# ordering on float4 -- btree_gist, pg_trgm -- crashed the segments.
+#
+# The float8 pair would come out the same from pg_config_manual.h and c.h on
+# 64-bit platforms; set them anyway, since configure does, and a 32-bit build
+# must fail loudly on a redefinition rather than quietly disagree.
+cdata.set('USE_FLOAT4_BYVAL', 1)
+
+# --with-rt, on by default: configure's AC_CHECK_LIB(rt, clock_gettime)
+# defines HAVE_LIBRT, and the interconnect's getCurrentTime() reads
+# CLOCK_MONOTONIC only under it. Without it the UDP interconnect times its
+# retransmissions and expirations by the wall clock, which NTP can move.
+if rt_dep.found()
+  cdata.set('HAVE_LIBRT', 1)
+endif
+cdata.set('FLOAT4PASSBYVAL', 'true')
+cdata.set('USE_FLOAT8_BYVAL', 1)
+cdata.set('FLOAT8PASSBYVAL', 'true')
 
 # This is what `select version()` returns, and gpMgmt parses it: gpversion.py
 # looks for "(Apache Cloudberry <version> build <build>)" and refuses to run
