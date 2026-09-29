@@ -65,13 +65,17 @@
 # build-cloudberry.yml's, in its entry format; the test job lists the few not
 # moved across yet.
 #
-# Option mapping, against the reference configure line in coverity.yml:
+# Option mapping, against the reference configure line in coverity.yml. The
+# full entry carries the left column as `configure`, and the build runs it and
+# compares the pg_config.h it writes with meson's -- so the table is checked,
+# not just documented:
 #
 #   --disable-external-fts      -> -Dexternal_fts=false
 #   --enable-orca               -> -Dorca=enabled
 #   --enable-pxf                -> -Dpxf=enabled
 #   --enable-orafce             -> -Dorafce=enabled
 #   --enable-ic-proxy           -> -Dic_proxy=enabled
+#   --enable-gpfdist            -> -Dgpfdist=enabled
 #   --enable-gpcloud            -> -Dgpcloud=enabled
 #   --enable-mapreduce          -> -Dmapreduce=enabled
 #   --enable-pax                -> -Dpax=enabled
@@ -215,6 +219,34 @@ jobs:
             -Dssl=openssl
             -Duuid=e2fs
             -Dpgport=5432
+          # The same configuration, spelled for configure. Only the full entry
+          # has one: minimal leaves the probed features to meson's `auto`,
+          # which enables whatever the image has, where configure's defaults
+          # are off -- a difference of defaults, not of the port.
+          configure: >-
+            --disable-external-fts
+            --enable-orca
+            --enable-pxf
+            --enable-orafce
+            --enable-ic-proxy
+            --enable-gpfdist
+            --enable-gpcloud
+            --enable-mapreduce
+            --with-diskquota
+            --enable-pax
+            --with-gp-stats-collector
+            --enable-tap-tests
+            --with-gssapi
+            --with-ldap
+            --with-libxml
+            --with-lz4
+            --with-zstd
+            --with-pam
+            --with-perl
+            --with-python
+            --with-ssl=openssl
+            --with-uuid=e2fs
+            --with-pgport=5432
         - name: minimal
           upload: false
           options: >-
@@ -351,6 +383,37 @@ jobs:
         if [ "${OTHER}" -gt 0 ]; then
           grep "WARNING" "${LOG}" | head -20
         fi
+
+    - name: Compare pg_config.h with configure's
+      if: matrix.configure
+      run: |
+        set -euo pipefail
+        # The same options should give the same pg_config.h; see
+        # meson-config-parity.py for why that is checked and what counts as a
+        # difference. This is where configure's copy comes from.
+        #
+        # configure runs in-tree, in a worktree of this commit, rather than in
+        # a VPATH directory: it runs ./getversion from the directory it is
+        # started in, so a VPATH configure writes an empty GP_VERSION. It
+        # stops at configure, which takes about a minute, and it runs before
+        # the compile: a build whose configuration differs from configure's
+        # is not the one worth spending the next 40 minutes on.
+        su gpadmin -c "git -C ${GITHUB_WORKSPACE} worktree add --detach /tmp/autoconf-src HEAD"
+        # LD_LIBRARY_PATH as configure-cloudberry.sh sets it: configure runs
+        # a test program against xerces in the install prefix.
+        if ! su gpadmin -c "cd /tmp/autoconf-src && \
+            LD_LIBRARY_PATH=${INSTALL_PREFIX}/lib ./configure \
+              --prefix=${INSTALL_PREFIX} \
+              ${{ matrix.configure }} \
+              --with-includes=/usr/local/xerces-c/include \
+              --with-libraries=${INSTALL_PREFIX}/lib > configure.log 2>&1"; then
+          tail -50 /tmp/autoconf-src/configure.log
+          echo "::error::configure failed with the options the full build stands for"
+          exit 1
+        fi
+        python3 devops/build/automation/cloudberry/scripts/meson-config-parity.py \
+          /tmp/autoconf-src/src/include/pg_config.h \
+          build-meson/src/include/pg_config.h .
 
     - name: Build the frontend common library first
       run: |
