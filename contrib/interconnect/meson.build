@@ -60,3 +60,13 @@ install_data(
   'interconnect.control',
   kwargs: contrib_data_args,
 )
+
+# configure writes Makefile.interconnect (AC_CONFIG_FILES), which this
+# directory's Makefile includes for enable_ic_proxy. meson does not build with
+# that Makefile, but the regression suites run its installcheck, so render it
+# as configure would, from the values Makefile.global is rendered from.
+configure_file(
+  input: 'Makefile.interconnect.in',
+  output: 'Makefile.interconnect',
+  configuration: pgxs_cdata,
+)

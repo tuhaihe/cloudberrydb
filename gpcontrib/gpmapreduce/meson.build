@@ -56,6 +56,10 @@ gpmapreduce = executable('gpmapreduce',
 )
 bin_targets += gpmapreduce
 
-# NAME = regress / OBJS = mapred_test.o builds a regress.so used only by this
-# directory's installcheck target. It is never installed, so it is deferred
-# along with the rest of the test infrastructure.
+# NAME = regress / OBJS = mapred_test.o: the C functions this directory's
+# installcheck target creates. Never installed; built here so the build tree
+# has what that target loads, as it does for src/test/regress.
+gpmapreduce_regress = shared_module('regress',
+  files('mapred_test.c'),
+  kwargs: pg_test_mod_args,
+)
