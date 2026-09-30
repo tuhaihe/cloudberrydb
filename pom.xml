@@ -1441,7 +1441,6 @@ code or new licensing patterns.
             <!-- The following files are from pg_cron under PostgreSQL 
                  license, introduced by Cloudberry.
             -->
-            <exclude>src/include/task/bitstring.h</exclude>
             <exclude>src/include/task/cron.h</exclude>
             <exclude>src/include/task/pg_cron.h</exclude>
             <exclude>src/include/task/task_states.h</exclude>
