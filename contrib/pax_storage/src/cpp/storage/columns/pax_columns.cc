@@ -125,7 +125,7 @@ size_t PaxColumns::ToastCounts() {
   return all_number_of_toasts;
 }
 
-void PaxColumns::SetExternalToastDataBuffer(
+void PaxColumns::DistributeExternalToastDataBuffer(
     std::shared_ptr<DataBuffer<char>> external_toast_data,
     const std::vector<size_t> &column_sizes) {
   Assert(!external_toast_data_);
