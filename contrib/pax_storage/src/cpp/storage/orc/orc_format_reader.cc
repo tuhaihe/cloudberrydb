@@ -1128,8 +1128,8 @@ std::unique_ptr<PaxColumns> OrcFormatReader::ReadStripe(
 
     Assert(external_toast_buffer->Available() == 0);
 
-    pax_columns->DistributeExternalToastDataBuffer(
-        std::move(external_toast_buffer), column_ext_sizes);
+    pax_columns->SetExternalToastDataBuffer(std::move(external_toast_buffer),
+                                            column_ext_sizes);
   }
 
   Assert(streams_size == streams_index);
