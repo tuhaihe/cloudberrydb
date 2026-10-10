@@ -511,10 +511,6 @@ Feature: gprecoverseg tests
         And the segments are synchronized
         And the cluster is rebalanced
 
-    # Depends on behaviour Cloudberry does not implement (and that the
-    # Greenplum tree these were taken from does not implement either).
-    # Kept aligned upstream so they can be enabled with the feature.
-    @not_implemented
     Scenario: gprecoverseg recovers segment for valid max-rate options and errors out for others
       Given the database is running
         And all the segments are running
