@@ -81,7 +81,11 @@ they carry a tag, and the CI matrix filters on it:
                         fresh multi-host cluster per job; CI here builds a
                         single-host demo cluster, so they are filtered out.
     @demo_cluster       runs against the demo cluster CI builds.
-    @not_implemented    the behaviour was never built in Cloudberry.
+    @not_implemented    the behaviour was never built in Cloudberry. No
+                        scenario carries this today -- the suite's remaining
+                        gaps were ported from Greenplum -- but the CI matrix
+                        still filters on it, so it is the tag to reach for if
+                        an imported scenario ever outruns the product again.
     @differential       needs gprecoverseg --differential, which Cloudberry
                         does not have.
     @extended           long-running; not part of the per-commit matrix.
