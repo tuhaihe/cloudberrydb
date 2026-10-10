@@ -1778,7 +1778,6 @@ Feature: gprecoverseg tests
 
 
   @concourse_cluster
-    @not_implemented
     Scenario: gprecoverseg recovery to new host populates hostname and address from the config file correctly
         Given the database is running
           And all the segments are running
@@ -1796,7 +1795,6 @@ Feature: gprecoverseg tests
           And the segments are synchronized
 
     @concourse_cluster
-    @not_implemented
     Scenario: gprecoverseg recovery to same host (full inplace) populates hostname and address from the config file correctly
         Given the database is running
           And all the segments are running
@@ -1815,7 +1813,6 @@ Feature: gprecoverseg tests
 
 
   @concourse_cluster
-    @not_implemented
     Scenario: gprecoverseg recovery with invalid format with hostname in config file
         Given the database is running
           And all the segments are running
@@ -1835,7 +1832,6 @@ Feature: gprecoverseg tests
 
 
   @concourse_cluster
-    @not_implemented
     Scenario: gprecoverseg incremental recovery populates hostname and address from the config file correctly
         Given the database is running
           And all the segments are running
@@ -1853,7 +1849,6 @@ Feature: gprecoverseg tests
           And the segments are synchronized
 
     @concourse_cluster
-    @not_implemented
     Scenario: gprecoverseg recovery with and without hostname parameter in config file
         Given the database is running
           And all the segments are running
@@ -1868,7 +1863,6 @@ Feature: gprecoverseg tests
           And the segments are synchronized
 
     @concourse_cluster
-    @not_implemented
     Scenario: gprecoverseg throws warning and skips recovery if provided hostname and address can not be resolved to same host
         Given the database is running
           And all the segments are running
@@ -1887,7 +1881,6 @@ Feature: gprecoverseg tests
           And the segments are synchronized
 
     @concourse_cluster
-    @not_implemented
     Scenario: gprecoverseg incremental recovery fails if config file contains wrong hostname of failed segment
         Given the database is running
           And all the segments are running
@@ -1905,13 +1898,6 @@ Feature: gprecoverseg tests
           And gprecoverseg should return a return code of 0
           And the cluster is rebalanced
 
-  # gprecoverseg's -i config file takes "address|port|datadir" here;
-  # Greenplum also accepts a leading hostname (3, 4 or 5 parts) and, with it,
-  # the hostname-vs-address cross-check these two scenarios assert. Cloudberry's
-  # _parseConfigFile() only understands 3 parts, so the run stops at
-  #   expected 3 parts on failed segment group, obtained 4
-  # Kept aligned with upstream so they can be enabled with the feature.
-  @not_implemented
   @demo_cluster
   Scenario: gprecoverseg recovers segment when config file contains hostname on demo cluster
     Given the database is running
@@ -1930,13 +1916,6 @@ Feature: gprecoverseg tests
     And the cluster configuration has no segments where "content=0 and status='d'"
     Then the cluster is rebalanced
 
-  # gprecoverseg's -i config file takes "address|port|datadir" here;
-  # Greenplum also accepts a leading hostname (3, 4 or 5 parts) and, with it,
-  # the hostname-vs-address cross-check these two scenarios assert. Cloudberry's
-  # _parseConfigFile() only understands 3 parts, so the run stops at
-  #   expected 3 parts on failed segment group, obtained 4
-  # Kept aligned with upstream so they can be enabled with the feature.
-  @not_implemented
   @demo_cluster
   Scenario: gprecoverseg skips recovery when config file contains invalid hostname on demo cluster
     Given the database is running
