@@ -1987,7 +1987,6 @@ Feature: gprecoverseg tests
 
   @demo_cluster
   @concourse_cluster
-  @not_implemented
   Scenario: gprecoverseg rebalance aborts and throws exception if replay lag on mirror is more than or equal to the allowed limit
       Given the database is running
         And all the segments are running
@@ -2007,7 +2006,6 @@ Feature: gprecoverseg tests
 
   @demo_cluster
   @concourse_cluster
-  @not_implemented
   Scenario: gprecoverseg errors out if invalid options are used with --disable-replay-lag
       Given the database is running
         And all the segments are running
