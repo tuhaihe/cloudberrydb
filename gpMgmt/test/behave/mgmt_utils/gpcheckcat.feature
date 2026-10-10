@@ -747,13 +747,6 @@ Feature: gpcheckcat tests
         And the user runs "dropdb all_good"
 
 
-    # The first half needs a postmaster started with gp_role=utility to reject
-    # non-utility connections ("System was started in single node mode - only
-    # utility mode connections are allowed").  Greenplum does that in
-    # InitPostgres(); Cloudberry dropped the check, so the connection succeeds
-    # and gpcheckcat returns 0.  Kept aligned with upstream so the scenario can
-    # be enabled once the check is restored.
-    @not_implemented
     Scenario: validate session GUC passed with -x is set
         Given the database is not running
           And the user runs "gpstart -ma"
