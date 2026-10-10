@@ -815,12 +815,6 @@ Feature: gprecoverseg tests
 
   @demo_cluster
   @concourse_cluster
-  # gprecoverseg does not detect a pg_basebackup that is already running
-  # against a segment: get_segments_with_running_basebackup and the
-  # gp_stat_replication check around it were never carried over, so nothing
-  # here prints "Found pg_basebackup running for segments with contentIds".
-  # Kept aligned with upstream so they can be enabled with the feature.
-  @not_implemented
   Scenario: gprecoverseg gives warning if pg_basebackup already running for one of the failed segments
     Given the database is running
     And all the segments are running
@@ -853,12 +847,6 @@ Feature: gprecoverseg tests
 
   @demo_cluster
   @concourse_cluster
-  # gprecoverseg does not detect a pg_basebackup that is already running
-  # against a segment: get_segments_with_running_basebackup and the
-  # gp_stat_replication check around it were never carried over, so nothing
-  # here prints "Found pg_basebackup running for segments with contentIds".
-  # Kept aligned with upstream so they can be enabled with the feature.
-  @not_implemented
   Scenario: gprecoverseg gives warning if pg_basebackup already running for some of the failed segments
     Given the database is running
     And all the segments are running
@@ -893,12 +881,6 @@ Feature: gprecoverseg tests
 
   @demo_cluster
   @concourse_cluster
-  # gprecoverseg does not detect a pg_basebackup that is already running
-  # against a segment: get_segments_with_running_basebackup and the
-  # gp_stat_replication check around it were never carried over, so nothing
-  # here prints "Found pg_basebackup running for segments with contentIds".
-  # Kept aligned with upstream so they can be enabled with the feature.
-  @not_implemented
   Scenario: gprecoverseg -aF gives warning if pg_basebackup already running for all of the failed segments
     Given the database is running
     And all the segments are running
@@ -932,12 +914,6 @@ Feature: gprecoverseg tests
 
   @demo_cluster
   @concourse_cluster
-  # gprecoverseg does not detect a pg_basebackup that is already running
-  # against a segment: get_segments_with_running_basebackup and the
-  # gp_stat_replication check around it were never carried over, so nothing
-  # here prints "Found pg_basebackup running for segments with contentIds".
-  # Kept aligned with upstream so they can be enabled with the feature.
-  @not_implemented
   Scenario: gprecoverseg -i gives warning if pg_basebackup already running for all failed segments
     Given the database is running
     And all the segments are running
