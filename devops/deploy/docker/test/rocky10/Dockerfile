@@ -100,7 +100,7 @@ RUN dnf install -y \
 RUN /usr/sbin/groupadd gpadmin && \
     /usr/sbin/useradd gpadmin -g gpadmin -G wheel && \
     echo 'gpadmin ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/90-gpadmin && \
-    echo -e '\n# Add Cloudberry entries\nif [ -f /usr/local/cloudberry/cloudberry-env.sh ]; then\n  source /usr/local/cloudberry/cloudberry-env.sh\n  export COORDINATOR_DATA_DIRECTORY=/data1/coordinator/gpseg-1\nfi' >> /home/gpadmin/.bashrc
+    echo -e '\n# Add Cloudberry entries\nif [ -f /usr/local/cloudberry-db/cloudberry-env.sh ]; then\n  source /usr/local/cloudberry-db/cloudberry-env.sh\n  export COORDINATOR_DATA_DIRECTORY=/data1/coordinator/gpseg-1\nfi' >> /home/gpadmin/.bashrc
 
 # --------------------------------------------------------------------
 # Copy Configuration Files and Setup the Environment
@@ -112,7 +112,7 @@ RUN /usr/sbin/groupadd gpadmin && \
 # --------------------------------------------------------------------
 COPY ./configs/* /tmp/
 
-RUN cp /tmp/90-cbdb-limits /etc/security/limits.d/90-cbdb-limits && \
+RUN cp /tmp/90-cbdb-limits /etc/security/limits.d/90-cbdb-limits.conf && \
     sed -i.bak -r 's/^(session\s+required\s+pam_limits.so)/#\1/' /etc/pam.d/* && \
     cat /usr/share/zoneinfo/${TIMEZONE_VAR} > /etc/localtime && \
     chmod 777 /tmp/init_system.sh && \

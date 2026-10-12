@@ -105,7 +105,7 @@ def test_system_limits_configured(host):
     """
     Test if the custom system limits are applied.
     """
-    limits_file = host.file("/etc/security/limits.d/90-cbdb-limits")
+    limits_file = host.file("/etc/security/limits.d/90-cbdb-limits.conf")
     assert limits_file.exists
 
 

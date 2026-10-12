@@ -176,7 +176,7 @@ RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100 && \
 
 COPY ./configs/* /tmp/
 
-RUN cp /tmp/90-cbdb-limits /etc/security/limits.d/90-cbdb-limits && \
+RUN cp /tmp/90-cbdb-limits /etc/security/limits.d/90-cbdb-limits.conf && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone && \
     chmod 755 /tmp/init_system.sh && \

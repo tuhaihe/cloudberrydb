@@ -182,7 +182,7 @@ RUN dnf makecache && \
 # --------------------------------------------------------------------
 COPY ./configs/* /tmp/
 
-RUN cp /tmp/90-cbdb-limits /etc/security/limits.d/90-cbdb-limits && \
+RUN cp /tmp/90-cbdb-limits /etc/security/limits.d/90-cbdb-limits.conf && \
     sed -i.bak -r 's/^(session\s+required\s+pam_limits.so)/#\1/' /etc/pam.d/* && \
     cat /usr/share/zoneinfo/${TIMEZONE_VAR} > /etc/localtime && \
     chmod 777 /tmp/init_system.sh && \

@@ -113,7 +113,7 @@ RUN /usr/sbin/groupadd gpadmin && \
     /usr/sbin/useradd -m -g gpadmin gpadmin -s /bin/bash && \
     echo 'gpadmin ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/90-gpadmin && \
     chmod 0440 /etc/sudoers.d/90-gpadmin && \
-    echo '\n# Add Cloudberry entries\nif [ -f /usr/local/cloudberry/cloudberry-env.sh ]; then\n  source /usr/local/cloudberry/cloudberry-env.sh\n  export COORDINATOR_DATA_DIRECTORY=/data1/coordinator/gpseg-1\nfi' >> /home/gpadmin/.bashrc
+    echo '\n# Add Cloudberry entries\nif [ -f /usr/local/cloudberry-db/cloudberry-env.sh ]; then\n  source /usr/local/cloudberry-db/cloudberry-env.sh\n  export COORDINATOR_DATA_DIRECTORY=/data1/coordinator/gpseg-1\nfi' >> /home/gpadmin/.bashrc
 
 # --------------------------------------------------------------------
 # Copy Configuration Files and Setup the Environment
@@ -125,7 +125,7 @@ RUN /usr/sbin/groupadd gpadmin && \
 # --------------------------------------------------------------------
 COPY ./configs/* /tmp/
 
-RUN cp /tmp/90-cbdb-limits /etc/security/limits.d/90-cbdb-limits && \
+RUN cp /tmp/90-cbdb-limits /etc/security/limits.d/90-cbdb-limits.conf && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone && \
     chmod 755 /tmp/init_system.sh && \
