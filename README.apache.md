@@ -31,6 +31,7 @@ This file is licensed under the GPL (Category X) and has been removed from the s
 
 The following entities have contributed to the Greenplum-based source code under the Apache License 2.0:
 
+- Metapa (merged with Didera in 2003 to form Greenplum)
 - Greenplum, Inc.
 - EMC Corporation
 - VMware, Inc.

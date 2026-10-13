@@ -1828,6 +1828,7 @@ code or new licensing patterns.
               <licenseFamilyName>Apache License (Broadcom-derived)</licenseFamilyName>
               <licenseFamilyCategory>BRDC</licenseFamilyCategory>
               <patterns>
+                <!-- ORCA files Greenplum added in 2024, after Broadcom acquired VMware. -->
                 <pattern>Copyright (C) 2024 VMware by Broadcom.</pattern>
                 <pattern>Copyright (C) 2024 Broadcom</pattern>
               </patterns>
@@ -1860,6 +1861,7 @@ code or new licensing patterns.
                 <pattern>Copyright (c) 2007 Greenplum Inc</pattern>
                 <pattern>Copyright (c) 2010, Greenplum Software</pattern>
                 <pattern>Copyright (c) Greenplum Inc 2010</pattern>
+                <!-- Metapa merged with Didera in 2003 to form Greenplum. -->
                 <pattern>Copyright (c) Metapa 2005. All Rights Reserved.</pattern>
                 <pattern>Copyright Greenplum 2008</pattern>
               </patterns>
