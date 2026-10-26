@@ -806,9 +806,6 @@ bool TestexprIsHashable(Node *testexpr, List *param_ids);
 RTEPermissionInfo *
 GetRTEPermissionInfo(List *rteperminfos, const RangeTblEntry *rte);
 
-gpos::BOOL WalkQueryTree(Query *query, bool (*walker)(), void *context,
-						 int flags);
-
 }  //namespace gpdb
 
 #define ForEach(cell, l) \
