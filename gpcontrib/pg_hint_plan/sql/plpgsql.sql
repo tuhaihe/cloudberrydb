@@ -3,6 +3,7 @@
 --
 
 SET search_path TO public;
+SET optimizer TO off; -- CBDB: test the Postgres planner
 SET client_min_messages TO log;
 \set SHOW_CONTEXT always
 
@@ -120,7 +121,32 @@ end; $$;
 call test_hint_transaction('before');
 call test_hint_transaction('after');
 
-table test_hint_tab;
+-- CBDB: rows come from several segments
+table test_hint_tab order by a;
 drop procedure test_hint_transaction;
 drop function test_hint_queries;
 drop table test_hint_tab;
+
+-- CBDB: a statement without a hint must not inherit the hint of the previous
+-- statement in the same function.  Query IDs are off so that the hint string
+-- is not reset when the statement is parsed.
+SET compute_query_id TO off;
+create table test_hint_inherit (id int, payload text) distributed by (id);
+insert into test_hint_inherit select i, repeat('x', 100) from generate_series(1, 10000) i;
+create index on test_hint_inherit (id);
+analyze test_hint_inherit;
+create function test_hint_inherit() returns setof text
+language plpgsql as $$
+declare line text;
+begin
+  for line in execute '/*+ SeqScan(t) */ explain (costs off) select payload from test_hint_inherit t where id = 42' loop
+    if line ~ 'Scan' then return next 'hinted: ' || line; end if;
+  end loop;
+  for line in execute 'explain (costs off) select payload from test_hint_inherit t where id = 42' loop
+    if line ~ 'Scan' then return next 'unhinted: ' || line; end if;
+  end loop;
+end; $$;
+select * from test_hint_inherit();
+drop function test_hint_inherit;
+drop table test_hint_inherit;
+RESET compute_query_id;

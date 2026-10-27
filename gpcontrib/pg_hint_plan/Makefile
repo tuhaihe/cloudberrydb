@@ -7,11 +7,10 @@
 MODULES = pg_hint_plan
 HINTPLANVER = 1.6.3
 
-REGRESS = init base_plan pg_hint_plan
-
-# CBDB: the other upstream tests (ut-init ut-A ut-S ut-J ut-L ut-G ut-R
-# ut-fdw ut-W ut-T ut-fini hints_anywhere plpgsql hint_table oldextversions)
-# are not adapted to Cloudberry yet.
+# CBDB: the ut-* tests (other than ut-fini) and ut-fdw are not adapted to
+# Cloudberry yet.
+REGRESS = init base_plan pg_hint_plan hints_anywhere plpgsql ut-fini \
+	hint_table oldextversions
 REGRESS_OPTS = --encoding=UTF8
 
 EXTENSION = pg_hint_plan

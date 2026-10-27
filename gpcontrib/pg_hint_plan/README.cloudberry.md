@@ -27,10 +27,13 @@ with `CBDB:` comments.
   printed for plans the Postgres planner made.
 - `pg_hint_plan--1.3.0.sql` adds `id` to the unique index on `hint_plan.hints`,
   because a unique index must contain the distribution key.
-- Only the `init`, `base_plan` and `pg_hint_plan` regression tests run. They
-  use the Postgres planner, their expected output has MPP plans, and
-  `pg_hint_plan` has Cloudberry-specific cases. The other upstream tests are
-  kept as upstream ships them but not run.
+- The regression tests that run are listed in `REGRESS` in the Makefile.
+  `init`, `base_plan`, `pg_hint_plan`, `hints_anywhere` and `plpgsql` are
+  adapted to Cloudberry: they use the Postgres planner, and their expected
+  output has MPP plans. `pg_hint_plan` has Cloudberry-specific cases, and
+  `oldextversions` also checks that `hint_plan.hints` rows survive the update
+  from 1.3.9. The `ut-*` tests other than `ut-fini`, and `ut-fdw`, are kept
+  as upstream ships them but not run.
 - In PL/pgSQL functions (including dynamic SQL in `EXECUTE`), a statement
   without a hint is planned without hints. Upstream lets it inherit the hint
   last seen in the function, or the hint of the statement calling the
