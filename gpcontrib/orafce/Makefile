@@ -102,6 +102,7 @@ REGRESS = orafce\
 		gp_dbms_sql\
 		gp_umask\
 		gp_plvstr\
+		gp_infinite_dates\
 		dbms_sql\
 		hextoraw\
 		utl_raw\

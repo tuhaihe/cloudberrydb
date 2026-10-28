@@ -22,6 +22,18 @@
 #include "builtins.h"
 #include "miscadmin.h"
 
+/*
+ * date + POSTGRES_EPOCH_JDATE overflows for +/-infinity, so the functions
+ * that need a calendar date reject infinite input.
+ */
+#define CHECK_FINITE_DATE(day) \
+	do { \
+		if (DATE_NOT_FINITE(day)) \
+			ereport(ERROR, \
+					(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), \
+					 errmsg("date is out of range"))); \
+	} while (0)
+
 #if PG_VERSION_NUM >= 160000
 
 #include "varatt.h"
@@ -520,6 +532,10 @@ ora_add_bizdays(DateADT day, int ndays)
 				auxd;
 	holiday_desc hd;
 
+	/* adding business days to infinity gives infinity */
+	if (DATE_NOT_FINITE(day))
+		return day;
+
 	d = j2day(day + POSTGRES_EPOCH_JDATE);
 	dx = ndays > 0 ? 1 : -1;
 
@@ -766,6 +782,8 @@ plvdate_isbizday(PG_FUNCTION_ARGS)
 				d;
 	holiday_desc hd;
 
+	CHECK_FINITE_DATE(day);
+
 	if (0 != ((1 << j2day(day + POSTGRES_EPOCH_JDATE)) & nonbizdays))
 		return false;
 
@@ -868,6 +886,8 @@ plvdate_set_nonbizday_day(PG_FUNCTION_ARGS)
 				d;
 	holiday_desc hd;
 
+	CHECK_FINITE_DATE(arg1);
+
 	if (arg2)
 	{
 		if (holidays_c == MAX_holidays)
@@ -938,6 +958,8 @@ plvdate_unset_nonbizday_day(PG_FUNCTION_ARGS)
 				d;
 	bool		found = false;
 	int			i;
+
+	CHECK_FINITE_DATE(arg1);
 
 	if (arg2)
 	{
@@ -1150,6 +1172,8 @@ plvdate_days_inmonth(PG_FUNCTION_ARGS)
 				m,
 				d;
 
+	CHECK_FINITE_DATE(day);
+
 	j2date(day + POSTGRES_EPOCH_JDATE, &y, &m, &d);
 
 	result = date2j(y, m + 1, 1) - date2j(y, m, 1);
@@ -1177,6 +1201,8 @@ plvdate_isleapyear(PG_FUNCTION_ARGS)
 				m,
 				d;
 	bool		result;
+
+	CHECK_FINITE_DATE(day);
 
 	j2date(day + POSTGRES_EPOCH_JDATE, &y, &m, &d);
 	result = (((y % 4) == 0) && ((y % 100) != 0)) || ((y % 400) == 0);

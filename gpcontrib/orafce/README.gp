@@ -68,6 +68,9 @@ git read-tree --prefix=gpcontrib/orafce/ -u $tree
    from the client, also one set before the library was loaded, and
    rejects an empty umask.
  - plvstr.c: plvstr.normalize() drops leading whitespace, as before 4.17.
+ - datefce.c, plvdate.c: trunc(), round() and the business day functions
+   leave infinite dates as they are; the other plvdate functions reject
+   them.
  - DATA in the Makefile keeps the 3.x upgrade scripts, which upstream no
    longer installs, so extensions created by older releases can still be
    updated.
