@@ -76,6 +76,13 @@ git read-tree --prefix=gpcontrib/orafce/ -u $tree
    in the GUCs orafce.plvdate_state, orafce.plvsubst_keyword and
    orafce.nls_sort, set with set_config() and marked GUC_GPDB_NEED_SYNC,
    so the segments see them.
+ - regexp_like(text, text, text) and regexp_not_like() test for a match
+   with EXISTS, not for the first group; regexp_not_like() is IMMUTABLE
+   PARALLEL SAFE. orafce--4.16--4.17.sql redefines them.
+ - orafce--4.17.sql uses the upgrade scripts' function bodies, and
+   orafce--4.16--4.17.sql also makes orafce_concat2(varchar2, varchar2)
+   IMMUTABLE and redefines regexp_substr(), so an updated extension
+   matches a fresh install.
  - DATA in the Makefile keeps the 3.x upgrade scripts, which upstream no
    longer installs, so extensions created by older releases can still be
    updated.
