@@ -67,6 +67,7 @@ git read-tree --prefix=gpcontrib/orafce/ -u $tree
  - file.c: the orafce.umask check hook checks every value that comes
    from the client, also one set before the library was loaded, and
    rejects an empty umask.
+ - plvstr.c: plvstr.normalize() drops leading whitespace, as before 4.17.
  - DATA in the Makefile keeps the 3.x upgrade scripts, which upstream no
    longer installs, so extensions created by older releases can still be
    updated.

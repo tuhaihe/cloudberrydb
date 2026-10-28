@@ -101,6 +101,7 @@ REGRESS = orafce\
 		gp_dbms_pipe\
 		gp_dbms_sql\
 		gp_umask\
+		gp_plvstr\
 		dbms_sql\
 		hextoraw\
 		utl_raw\
