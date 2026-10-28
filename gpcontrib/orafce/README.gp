@@ -71,6 +71,11 @@ git read-tree --prefix=gpcontrib/orafce/ -u $tree
  - datefce.c, plvdate.c: trunc(), round() and the business day functions
    leave infinite dates as they are; the other plvdate functions reject
    them.
+ - plvdate.c, plvsubst.c, others.c: the settings made by the plvdate
+   set_* functions, plvsubst.setsubst() and oracle.set_nls_sort() are kept
+   in the GUCs orafce.plvdate_state, orafce.plvsubst_keyword and
+   orafce.nls_sort, set with set_config() and marked GUC_GPDB_NEED_SYNC,
+   so the segments see them.
  - DATA in the Makefile keeps the 3.x upgrade scripts, which upstream no
    longer installs, so extensions created by older releases can still be
    updated.
