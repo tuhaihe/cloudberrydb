@@ -95,6 +95,7 @@ REGRESS = orafce\
 		regexp_func\
 		gp_partition_by\
 		gp_distributed_by\
+		gp_regexp_not_like\
 		gp_dbms_assert\
 		dbms_sql\
 		hextoraw\

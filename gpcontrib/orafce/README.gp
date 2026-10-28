@@ -63,7 +63,8 @@ git read-tree --prefix=gpcontrib/orafce/ -u $tree
  - Tests: gp_distributed_by and gp_partition_by are added, init_file
    masks segment details, nlssort uses a UTF-8 database, orafce2 calls the
    built-in decode(), and dbms_pipe_session_B polls instead of relying on
-   a fixed timeout. gp_dbms_assert covers the dbms_assert fix.
+   a fixed timeout. gp_dbms_assert and gp_regexp_not_like cover the
+   Cloudberry fixes and additions.
  - Upstream's GitHub workflows, install_bindist.py, typedefs tooling
    (and the Makefile targets that use it) and SECURITY.md are not
    imported.

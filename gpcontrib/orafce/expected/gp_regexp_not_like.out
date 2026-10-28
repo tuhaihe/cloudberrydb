@@ -1,0 +1,76 @@
+-- regexp_not_like() is a Cloudberry addition, the negation of regexp_like()
+SELECT oracle.regexp_not_like('abc', 'b');
+ regexp_not_like 
+-----------------
+ f
+(1 row)
+
+SELECT oracle.regexp_not_like('abc', 'x');
+ regexp_not_like 
+-----------------
+ t
+(1 row)
+
+SELECT oracle.regexp_not_like('ABC', 'b', 'i');
+ regexp_not_like 
+-----------------
+ f
+(1 row)
+
+SELECT oracle.regexp_not_like('ABC', 'b', 'c');
+ regexp_not_like 
+-----------------
+ t
+(1 row)
+
+SELECT oracle.regexp_not_like('ABC', 'b', NULL);
+ regexp_not_like 
+-----------------
+ t
+(1 row)
+
+SELECT oracle.regexp_not_like(NULL, 'b') IS NULL AS null_source;
+ null_source 
+-------------
+ t
+(1 row)
+
+SELECT oracle.regexp_not_like('abc', NULL, 'i') IS NULL AS null_pattern;
+ null_pattern 
+--------------
+ t
+(1 row)
+
+-- newline handling follows regexp_like(): '^' only matches at line start with 'm'
+SELECT oracle.regexp_not_like('foo' || chr(10) || 'bar', '^bar');
+ regexp_not_like 
+-----------------
+ t
+(1 row)
+
+SELECT oracle.regexp_not_like('foo' || chr(10) || 'bar', '^bar', 'm');
+ regexp_not_like 
+-----------------
+ f
+(1 row)
+
+-- evaluated on the segments, it must agree with NOT regexp_like()
+CREATE TABLE gp_regexp_t (id int, s text) DISTRIBUTED BY (id);
+INSERT INTO gp_regexp_t
+  SELECT i, CASE WHEN i % 3 = 0 THEN 'Apple' || i ELSE 'pear' || i END
+  FROM generate_series(1, 30) i;
+SELECT count(*) FROM gp_regexp_t WHERE oracle.regexp_not_like(s, '^apple', 'i');
+ count 
+-------
+    20
+(1 row)
+
+SELECT count(*) FROM gp_regexp_t
+  WHERE oracle.regexp_not_like(s, '^apple', 'i')
+        IS DISTINCT FROM NOT oracle.regexp_like(s, '^apple', 'i');
+ count 
+-------
+     0
+(1 row)
+
+DROP TABLE gp_regexp_t;
