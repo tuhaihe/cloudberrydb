@@ -60,6 +60,10 @@ git read-tree --prefix=gpcontrib/orafce/ -u $tree
  - file.c: the utl_file_dir queries qualify every function and operator
    with pg_catalog, so an "=" of the caller's in search_path cannot pass
    the directory check.
+ - pipe.c: dbms_pipe.__list_pipes() raises an error instead of crashing
+   when it is called without a column definition list.
+ - dbms_sql.c: a cursor looks its portal up by name (cursor_portal())
+   and does not use one that was dropped with an aborted subtransaction.
  - file.c: the orafce.umask check hook checks every value that comes
    from the client, also one set before the library was loaded, and
    rejects an empty umask.

@@ -98,6 +98,8 @@ REGRESS = orafce\
 		gp_regexp_not_like\
 		gp_dbms_assert\
 		gp_utl_file\
+		gp_dbms_pipe\
+		gp_dbms_sql\
 		gp_umask\
 		dbms_sql\
 		hextoraw\
