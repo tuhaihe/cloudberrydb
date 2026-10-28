@@ -57,14 +57,20 @@ git read-tree --prefix=gpcontrib/orafce/ -u $tree
  - dbms_assert.c: EMPTY_STR() uses VARSIZE_ANY_EXHDR(), so a 3-byte value
    with a short varlena header is not taken for an empty string.
  - dbms_sql.c: the plan argument types are copied before they are freed.
+ - file.c: the utl_file_dir queries qualify every function and operator
+   with pg_catalog, so an "=" of the caller's in search_path cannot pass
+   the directory check.
+ - file.c: the orafce.umask check hook checks every value that comes
+   from the client, also one set before the library was loaded, and
+   rejects an empty umask.
  - DATA in the Makefile keeps the 3.x upgrade scripts, which upstream no
    longer installs, so extensions created by older releases can still be
    updated.
  - Tests: gp_distributed_by and gp_partition_by are added, init_file
    masks segment details, nlssort uses a UTF-8 database, orafce2 calls the
    built-in decode(), and dbms_pipe_session_B polls instead of relying on
-   a fixed timeout. gp_dbms_assert and gp_regexp_not_like cover the
-   Cloudberry fixes and additions.
+   a fixed timeout. The other gp_* tests cover the Cloudberry fixes and
+   additions.
  - Upstream's GitHub workflows, install_bindist.py, typedefs tooling
    (and the Makefile targets that use it) and SECURITY.md are not
    imported.
