@@ -35,7 +35,7 @@
 #undef PG_RE_THROW
 #define PG_RE_THROW() siglongjmp(*PG_exception_stack, 1)
 
-/* Buffer to store the last error mesage from errdetail */
+/* Buffer to store the last error message from errdetail */
 static char lastErrorMsg[ERROR_MESSAGE_MAX_LEN];
 /* Buffer to store the expected error message as determined by the test */
 static char expectedErrorMsg[ERROR_MESSAGE_MAX_LEN];
@@ -69,7 +69,7 @@ errdetail_internal_impl(const char* fmt, ...)
 
 	appendStringInfoVA(&buf, fmt, args);
 	va_end(args);
-	strncpy(lastErrorMsg, buf.data, sizeof(lastErrorMsg) / sizeof(lastErrorMsg[0]));
+	strlcpy(lastErrorMsg, buf.data, sizeof(lastErrorMsg));
 
 	pfree(buf.data);
 }
@@ -91,6 +91,49 @@ errdetail_internal_impl(const char* fmt, ...)
     } \
 
 /*
+ * Calls incompatible_module_error() with the given magic block, and expects
+ * it to report an ERROR whose detail is expectedErrorMsg
+ */
+static void
+ExpectIncompatibleModuleError(const Pg_magic_struct *module_magic)
+{
+	EXPECT_EREPORT(ERROR);
+
+	PG_TRY();
+	{
+		incompatible_module_error("test", module_magic);
+		assert_true(false);
+	}
+	PG_CATCH();
+	{
+	}
+	PG_END_TRY();
+}
+
+/*
+ * Sets expectedErrorMsg to the detail incompatible_module_error() gives when
+ * the version or product of the module's magic block differs from ours
+ */
+static void
+SetExpectedVersionMismatch(const Pg_magic_struct *module_magic,
+						   const char *module_product)
+{
+	char		library_version[32];
+
+	if (module_magic->version >= 1000)
+		snprintf(library_version, sizeof(library_version), "%d",
+				 module_magic->version / 100);
+	else
+		snprintf(library_version, sizeof(library_version), "%d.%d",
+				 module_magic->version / 100,
+				 module_magic->version % 100);
+
+	snprintf(expectedErrorMsg, sizeof(expectedErrorMsg),
+			 "Server is version Cloudberry %d, library is version %s %s.",
+			 magic_data.version / 100, module_product, library_version);
+}
+
+/*
  * Tests if we error out if the loaded module's expected Pg_magic_struct
  * is smaller (i.e., we have newer fields)
  */
@@ -102,79 +145,69 @@ test__incompatible_module_error__struct_size_mismatch(void **state)
 	/* Simulate a smaller structure for the module's Pg_magic_struct */
 	module_magic.len = offsetof(Pg_magic_struct, version);
 
-	snprintf(expectedErrorMsg, 255, "Magic block has unexpected length or padding difference.");
+	snprintf(expectedErrorMsg, sizeof(expectedErrorMsg),
+			 "Magic block has unexpected length or padding difference.");
 
-	EXPECT_EREPORT(ERROR);
-
-	PG_TRY();
-	{
-		incompatible_module_error("test", &module_magic);
-		assert_true(false);
-	}
-	PG_CATCH();
-	{
-	}
-	PG_END_TRY();
+	ExpectIncompatibleModuleError(&module_magic);
 }
 
 /*
- * A utility method that can check header version mismatch error message
- * for different offsets. E.g., mismatch by 1 version, or -1 version tests
- * the error message when module magic's header version is ahead by 1
- * or trailing by 1
+ * Checks the version mismatch error for a module whose version is off from
+ * ours by diffOffset, e.g. ahead by 1 or trailing by 1
  */
-static void CheckHeaderVersionMismatch(int diffOffset)
+static void
+CheckVersionMismatch(int diffOffset)
 {
 	Pg_magic_struct module_magic = PG_MODULE_MAGIC_DATA;
 
-	snprintf(expectedErrorMsg, 255, "Magic block has unexpected length or padding difference.");
+	module_magic.version = magic_data.version + diffOffset;
 
-	EXPECT_EREPORT(ERROR);
+	SetExpectedVersionMismatch(&module_magic, "Cloudberry");
 
-	PG_TRY();
-	{
-		incompatible_module_error("test", &module_magic);
-		assert_true(false);
-	}
-	PG_CATCH();
-	{
-	}
-	PG_END_TRY();
+	ExpectIncompatibleModuleError(&module_magic);
 }
 
 /*
- * Tests if we error out if the loaded module's headerversion is different than ours
+ * Tests if we error out if the loaded module's version is different than ours
  */
 static void
-test__incompatible_module_error__headerversion_mismatch(void **state)
+test__incompatible_module_error__version_mismatch(void **state)
 {
-	CheckHeaderVersionMismatch(+1);
-	CheckHeaderVersionMismatch(-1);
+	CheckVersionMismatch(+1);
+	CheckVersionMismatch(-1);
 }
 
 /*
- * Tests if we don't throw a version mismatch error if the header versions are identical
+ * Tests if we error out with a version mismatch if the loaded module was
+ * built for PostgreSQL rather than Cloudberry, even at the same version
  */
 static void
-test__incompatible_module_error__headerversion_identical(void **state)
+test__incompatible_module_error__product_mismatch(void **state)
+{
+	Pg_magic_struct module_magic = PG_MODULE_MAGIC_DATA;
+
+	module_magic.product = PgMagicProductPostgres;
+
+	SetExpectedVersionMismatch(&module_magic, "PostgreSQL");
+
+	ExpectIncompatibleModuleError(&module_magic);
+}
+
+/*
+ * Tests if we don't throw a version mismatch error if the magic blocks are
+ * identical
+ */
+static void
+test__incompatible_module_error__magic_identical(void **state)
 {
 	/* Module magic is identical to ours */
 	Pg_magic_struct module_magic = PG_MODULE_MAGIC_DATA;
 
 	/* We should expect a "default" error */
-	snprintf(expectedErrorMsg, 255, "Magic block has unexpected length or padding difference.");
+	snprintf(expectedErrorMsg, sizeof(expectedErrorMsg),
+			 "Magic block has unexpected length or padding difference.");
 
-	EXPECT_EREPORT(ERROR);
-
-	PG_TRY();
-	{
-		incompatible_module_error("test", &module_magic);
-		assert_true(false);
-	}
-	PG_CATCH();
-	{
-	}
-	PG_END_TRY();
+	ExpectIncompatibleModuleError(&module_magic);
 }
 
 /*
@@ -222,8 +255,9 @@ main(int argc, char* argv[])
 
         const UnitTest tests[] = {
         		unit_test_setup_teardown(test__incompatible_module_error__struct_size_mismatch, SetupDataStructures, TeardownDataStructures),
-        		unit_test_setup_teardown(test__incompatible_module_error__headerversion_mismatch, SetupDataStructures, TeardownDataStructures),
-        		unit_test_setup_teardown(test__incompatible_module_error__headerversion_identical, SetupDataStructures, TeardownDataStructures),
+        		unit_test_setup_teardown(test__incompatible_module_error__version_mismatch, SetupDataStructures, TeardownDataStructures),
+        		unit_test_setup_teardown(test__incompatible_module_error__product_mismatch, SetupDataStructures, TeardownDataStructures),
+        		unit_test_setup_teardown(test__incompatible_module_error__magic_identical, SetupDataStructures, TeardownDataStructures),
         };
         return run_tests(tests);
 }
