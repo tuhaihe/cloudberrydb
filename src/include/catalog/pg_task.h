@@ -39,6 +39,13 @@
 CATALOG(pg_task,9637,TaskRelationId) BKI_SHARED_RELATION
 {
 	Oid			jobid;
+
+	/*
+	 * Cloudberry: the columns below follow a variable-length column, so they
+	 * are not at fixed offsets and must be read with heap_getattr().  Hide
+	 * them from C, as other catalogs do.  The column order is unchanged.
+	 */
+#ifdef CATALOG_VARLEN			/* variable-length fields start here */
 	text		schedule;
 	text		command;
 	text		nodename;
@@ -47,6 +54,7 @@ CATALOG(pg_task,9637,TaskRelationId) BKI_SHARED_RELATION
 	text		username;
 	bool		active BKI_DEFAULT(t);
 	text		jobname;
+#endif
 } FormData_pg_task;
 
 typedef FormData_pg_task *Form_pg_task;

@@ -44,6 +44,13 @@ CATALOG(pg_task_run_history,9993,TaskRunHistoryRelationId) BKI_SHARED_RELATION
 	Oid         runid;
 	Oid         jobid;
 	int32		job_pid BKI_DEFAULT(0);
+
+	/*
+	 * Cloudberry: the columns below follow a variable-length column, so they
+	 * are not at fixed offsets and must be read with heap_getattr().  Hide
+	 * them from C, as other catalogs do.  The column order is unchanged.
+	 */
+#ifdef CATALOG_VARLEN			/* variable-length fields start here */
 	text		database;
 	text		username;
 	text		command;
@@ -51,6 +58,7 @@ CATALOG(pg_task_run_history,9993,TaskRunHistoryRelationId) BKI_SHARED_RELATION
     text        return_message;
     timestamptz start_time;
     timestamptz end_time;
+#endif
 } FormData_pg_task_run_history;
 
 typedef FormData_pg_task_run_history *Form_pg_task_run_history;

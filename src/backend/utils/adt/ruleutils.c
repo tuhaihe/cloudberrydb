@@ -12630,7 +12630,8 @@ pg_get_dynamic_table_schedule(PG_FUNCTION_ARGS)
 	SysScanDesc		scanDescriptor = NULL;
 	ScanKeyData scanKey[2];
 	HeapTuple		heapTuple = NULL;
-	Form_pg_task	task = NULL;
+	bool			isnull;
+	Datum			datum;
 
 	if (!get_rel_relisdynamic(relid))
 	{
@@ -12671,10 +12672,15 @@ pg_get_dynamic_table_schedule(PG_FUNCTION_ARGS)
 		PG_RETURN_TEXT_P(cstring_to_text(""));
 	}
 
-	task = (Form_pg_task) GETSTRUCT(heapTuple);
-
+	/*
+	 * Cloudberry: schedule is a varlena column, so it is not part of the
+	 * C struct; fetch it with heap_getattr().
+	 */
 	resetStringInfo(&buf);
-	appendStringInfo(&buf, "%s", text_to_cstring(&task->schedule));
+	datum = heap_getattr(heapTuple, Anum_pg_task_schedule,
+						 RelationGetDescr(pg_task), &isnull);
+	if (!isnull)
+		appendStringInfo(&buf, "%s", TextDatumGetCString(datum));
 
 	systable_endscan(scanDescriptor);
 	table_close(pg_task, AccessShareLock);
