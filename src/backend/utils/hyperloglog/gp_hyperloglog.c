@@ -563,8 +563,14 @@ gp_hll_compress_dense(GpHLLCounter hloglog)
                  errdetail("Failed on request of size %zu.", data_rawsize + 4)));
     memset(dest,0,data_rawsize + 4);
 
+/*
+ * Cloudberry: clang does not know this GCC warning and would warn about the
+ * pragma itself (-Wunknown-warning-option) when building the JIT bitcode.
+ */
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
     data = malloc(data_rawsize);
     if (data == NULL){
         free(dest);
@@ -603,7 +609,9 @@ gp_hll_compress_dense(GpHLLCounter hloglog)
 				 errdetail("LZ compression return value: %d", len)));
 
     memcpy(hloglog->data,dest,len);
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
+#endif
 
     /* resize the counter to only encompass the compressed data and the struct
      *  overhead*/
