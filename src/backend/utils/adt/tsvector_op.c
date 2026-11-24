@@ -1220,12 +1220,20 @@ tsCompareString(char *a, int _lena, char *b, int _lenb, bool prefix)
 	else
 	{
 
+/*
+ * Cloudberry: clang does not know this GCC warning and would warn about the
+ * pragma itself (-Wunknown-warning-option) when building the JIT bitcode.
+ */
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
 
 		cmp = memcmp(a, b, Min((unsigned int) lena, (unsigned int) lenb));
 
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
+#endif
 
 		if (prefix)
 		{
