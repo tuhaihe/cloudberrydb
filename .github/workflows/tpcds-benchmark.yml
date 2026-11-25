@@ -1,0 +1,970 @@
+# --------------------------------------------------------------------
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed
+# with this work for additional information regarding copyright
+# ownership. The ASF licenses this file to You under the Apache
+# License, Version 2.0 (the "License"); you may not use this file
+# except in compliance with the License. You may obtain a copy of the
+# License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# permissions and limitations under the License.
+#
+# --------------------------------------------------------------------
+# GitHub Actions Workflow: Apache Cloudberry TPC-DS Benchmark
+# --------------------------------------------------------------------
+# Description:
+#
+#   Compares the TPC-DS performance of the Apache Cloudberry releases
+#   since 2.0 with the branch the workflow runs on (main for the
+#   weekly run), so that a performance change on main is seen before
+#   it is released.
+#
+# Workflow Overview:
+# 1. plan: lists the releases on the GitHub releases page of
+#    apache/cloudberry (drafts and pre-releases left out) from
+#    min_version on. If there are release candidate tags for a version
+#    newer than the latest release, it adds the newest of them, as a
+#    reference for reviewing the RC. Last comes the commit this run is
+#    for.
+# 2. build: builds each version with the same configure options, one
+#    job per version. Release builds are cached by commit, so a weekly
+#    run normally only builds main.
+# 3. bench: runs TPC-DS on all versions on one runner, so the versions
+#    are compared on the same hardware. Each version gets its own
+#    cluster and data; the rounds rotate through the versions.
+# 4. publish: posts the report as a GitHub Discussion (Q&A), which the ASF
+#    forwards to dev@cloudberry.apache.org. See "Triggers".
+#
+# Triggers:
+# - Every Sunday at 00:00 UTC, in apache/cloudberry only. The report
+#   is posted when main or the RC is slower than the latest release
+#   (in total by more than 5%, or a query by more than 20% and 5 s),
+#   or when the latest release or the RC has no posted report yet.
+#   Otherwise it is only in the job summary.
+# - Manual dispatch, also in forks. Posting is off unless asked for,
+#   and is never done outside apache/cloudberry.
+#
+# Notes:
+# - A hosted runner has 4 CPUs and 16 GB of memory, and a job may run
+#   for at most 6 hours. The default, scale factor 10 with 3 rounds,
+#   takes about 4 hours for four versions and still fits a fifth. It
+#   is a smoke test for performance, not a benchmark result: it shows
+#   changes of 5% or more, and some changes only appear at larger
+#   scales.
+# - TPC-DS data and queries come from the cbdb_tpcds extension, pinned
+#   below. The results are not TPC-DS results in the sense of the TPC
+#   rules and must not be published as such.
+# --------------------------------------------------------------------
+name: Apache Cloudberry TPC-DS Benchmark
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+    inputs:
+      scale_factor:
+        description: 'TPC-DS scale factor in GB'
+        required: false
+        default: '10'
+        type: string
+      rounds:
+        description: 'Times to run the 99 queries on each version (fewer if out of time)'
+        required: false
+        default: '3'
+        type: string
+      min_version:
+        description: 'Oldest release to include'
+        required: false
+        default: '2.0.0'
+        type: string
+      optimizer:
+        description: 'GPORCA (on) or the Postgres planner (off)'
+        required: false
+        default: 'on'
+        type: choice
+        options: ['on', 'off']
+      publish:
+        description: 'Post the report as a GitHub Discussion (apache/cloudberry only)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+# A step in a container runs with sh by default.
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # The releases always come from here, also when a fork runs this.
+  RELEASE_REPO: apache/cloudberry
+  # cbdb_tpcds: TPC-DS data generator, queries and runner.
+  TPCDS_REPO: avamingli/cbdb_tpcds
+  TPCDS_REF: 66b7e29f197465eb1ef17ef7402e0729245076da
+  # Bump to rebuild the cached release builds, e.g. after changing
+  # build-version.sh.
+  BUILD_RECIPE: r1
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-22.04
+    if: ${{ github.event_name == 'workflow_dispatch' || github.repository == 'apache/cloudberry' }}
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      versions: ${{ steps.plan.outputs.versions }}
+      baseline: ${{ steps.plan.outputs.baseline }}
+      candidate: ${{ steps.plan.outputs.candidate }}
+      rc: ${{ steps.plan.outputs.rc }}
+      scale: ${{ steps.plan.outputs.scale }}
+      rounds: ${{ steps.plan.outputs.rounds }}
+      optimizer: ${{ steps.plan.outputs.optimizer }}
+    steps:
+    - name: List the versions
+      id: plan
+      env:
+        GH_TOKEN: ${{ github.token }}
+        INPUT_SCALE: ${{ inputs.scale_factor }}
+        INPUT_ROUNDS: ${{ inputs.rounds }}
+        INPUT_MIN_VERSION: ${{ inputs.min_version }}
+        INPUT_OPTIMIZER: ${{ inputs.optimizer }}
+        REF_NAME: ${{ github.ref_name }}
+        CANDIDATE_REPO: ${{ github.repository }}
+        CANDIDATE_SHA: ${{ github.sha }}
+      run: |
+        set -euo pipefail
+        scale="${INPUT_SCALE:-10}"
+        rounds="${INPUT_ROUNDS:-3}"
+        min="${INPUT_MIN_VERSION:-2.0.0}"
+        optimizer="${INPUT_OPTIMIZER:-on}"
+        [[ "${scale}" =~ ^[1-9][0-9]{0,3}$ ]] || { echo "::error::scale_factor must be a number"; exit 1; }
+        [[ "${rounds}" =~ ^[1-9]$ ]] || { echo "::error::rounds must be 1 to 9"; exit 1; }
+        [[ "${min}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::min_version must look like 2.0.0"; exit 1; }
+        [[ "${optimizer}" =~ ^(on|off)$ ]] || { echo "::error::optimizer must be on or off"; exit 1; }
+
+        # Final releases only, from min_version on, oldest first.
+        gh api --paginate "repos/${RELEASE_REPO}/releases" \
+          --jq '.[] | select(.draft | not) | select(.prerelease | not) | .tag_name' > tags.txt
+        : > releases.txt
+        while read -r tag; do
+          [[ "${tag}" =~ ^([0-9]+\.[0-9]+\.[0-9]+)(-incubating)?$ ]] || continue
+          v="${BASH_REMATCH[1]}"
+          [ "$(printf '%s\n%s\n' "${min}" "${v}" | sort -V | head -n 1)" = "${min}" ] || continue
+          printf '%s %s\n' "${v}" "${tag}" >> releases.txt
+        done < tags.txt
+        sort -V -o releases.txt releases.txt
+        [ -s releases.txt ] || { echo "::error::no release from ${min} on"; exit 1; }
+
+        baseline=$(tail -n 1 releases.txt | cut -d' ' -f2)
+        latest=$(tail -n 1 releases.txt | cut -d' ' -f1)
+
+        # The newest release candidate of a version newer than the
+        # latest release, if there is one.
+        rc=$(git ls-remote --tags --refs "https://github.com/${RELEASE_REPO}.git" | cut -f2 | sed 's#^refs/tags/##' |
+             sed -nE 's/^(([0-9]+\.[0-9]+\.[0-9]+)(-incubating)?-rc([0-9]+))$/\2 \4 \1/p' |
+             while read -r v n tag; do
+               if [ "${v}" != "${latest}" ] &&
+                  [ "$(printf '%s\n%s\n' "${latest}" "${v}" | sort -V | tail -n 1)" = "${v}" ]; then
+                 echo "${v} ${n} ${tag}"
+               fi
+             done | sort -k1,1V -k2,2n | tail -n 1 | cut -d' ' -f3)
+        if [ -n "${rc}" ]; then
+          printf '%s %s\n' "${rc%%-*}" "${rc}" >> releases.txt
+        fi
+
+        candidate=$(sed -E 's/[^A-Za-z0-9._-]+/-/g' <<< "${REF_NAME}")
+        matrix='[]'
+        while read -r _ tag; do
+          sha=$(git ls-remote "https://github.com/${RELEASE_REPO}.git" "refs/tags/${tag}^{}" "refs/tags/${tag}" \
+                | sort -k2 -r | head -n 1 | cut -f1)
+          [[ "${sha}" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::cannot resolve ${tag}"; exit 1; }
+          matrix=$(jq -c --arg n "${tag}" --arg r "${RELEASE_REPO}" --arg s "${sha}" \
+                   '. + [{name: $n, repo: $r, sha: $s, release: true}]' <<< "${matrix}")
+        done < releases.txt
+        matrix=$(jq -c --arg n "${candidate}" --arg r "${CANDIDATE_REPO}" --arg s "${CANDIDATE_SHA}" \
+                 '. + [{name: $n, repo: $r, sha: $s, release: false}]' <<< "${matrix}")
+
+        {
+          echo "matrix=${matrix}"
+          echo "versions=$(jq -r 'map(.name) | join(" ")' <<< "${matrix}")"
+          echo "baseline=${baseline}"
+          echo "candidate=${candidate}"
+          echo "rc=${rc}"
+          echo "scale=${scale}"
+          echo "rounds=${rounds}"
+          echo "optimizer=${optimizer}"
+        } | tee -a "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.version.name }}
+    needs: plan
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: true
+      matrix:
+        version: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    container:
+      image: apache/incubator-cloudberry:cbdb-build-rocky9-latest
+      options: >-
+        --user root
+        --hostname cdw
+        -v /usr/share:/host_usr_share
+        -v /usr/local:/host_usr_local
+        -v /opt:/host_opt
+    steps:
+    - name: Restore a cached release build
+      id: cache
+      if: ${{ matrix.version.release }}
+      uses: actions/cache/restore@v6
+      with:
+        path: install/${{ matrix.version.name }}.tar.gz
+        key: tpcds-bench-${{ matrix.version.sha }}-${{ env.BUILD_RECIPE }}
+
+    - name: Free disk space
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+      run: |
+        rm -rf /host_opt/hostedtoolcache /host_usr_local/lib/android /host_usr_share/dotnet \
+               /host_opt/ghc /host_usr_local/.ghcup /host_usr_share/swift || true
+        df -h /
+
+    - name: Build
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+      env:
+        REPO: ${{ matrix.version.repo }}
+        SHA: ${{ matrix.version.sha }}
+        NAME: ${{ matrix.version.name }}
+      run: |
+        # Every version is built with the same configure options, which
+        # on purpose do not follow configure-cloudberry.sh: that script
+        # changes between releases, and a benchmark needs the same build for
+        # all of them. The tarball holds the contents of the installation
+        # prefix, so it can be unpacked anywhere and reached through a
+        # symbolic link at /usr/local/cloudberry-db.
+        su - gpadmin -c "/tmp/init_system.sh"
+        OUT="${GITHUB_WORKSPACE}/install/${NAME}.tar.gz"
+        set -euo pipefail
+
+        PREFIX=/usr/local/cloudberry-db
+
+        if ! [[ "${REPO}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+          echo "bad repository '${REPO}'" >&2; exit 1
+        fi
+        if ! [[ "${SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "bad commit '${SHA}'" >&2; exit 1
+        fi
+
+        SRC=/tmp/bench-src
+        STAGE=/tmp/bench-stage
+        rm -rf "${SRC}" "${STAGE}"
+        mkdir -p "${SRC}" "${STAGE}" "$(dirname "${OUT}")"
+        chown gpadmin:gpadmin "${SRC}" "${STAGE}"
+
+        # configure runs test programs that link against Xerces-C (ORCA).
+        echo /usr/local/xerces-c/lib > /etc/ld.so.conf.d/xerces-c.conf
+        ldconfig
+        # Older releases call yacc, which the image does not have.
+        if ! command -v yacc > /dev/null; then
+          printf '#!/bin/sh\nexec bison -y "$@"\n' > /usr/local/bin/yacc
+          chmod +x /usr/local/bin/yacc
+        fi
+
+        su - gpadmin -c "set -euo pipefail
+          cd ${SRC}
+          git init -q .
+          git fetch -q --depth 1 https://github.com/${REPO}.git ${SHA}
+          git checkout -q --detach FETCH_HEAD
+          git submodule -q update --init --recursive --depth 1"
+
+        su - gpadmin -c "set -euo pipefail
+          cd ${SRC}
+          ./configure --prefix=${PREFIX} \
+            --disable-external-fts --enable-orca \
+            --with-lz4 --with-zstd --with-openssl --with-libxml \
+            --with-python --with-pythonsrc-ext --with-perl --with-uuid=e2fs \
+            --with-includes=/usr/local/xerces-c/include \
+            --with-libraries=/usr/local/xerces-c/lib > /tmp/bench-configure.log 2>&1 \
+            || { tail -n 50 config.log; exit 1; }
+          make -j\$(nproc) -s > /tmp/bench-make.log 2>&1 || { tail -n 100 /tmp/bench-make.log; exit 1; }
+          make -s install DESTDIR=${STAGE} > /tmp/bench-install.log 2>&1 || { tail -n 100 /tmp/bench-install.log; exit 1; }
+          make -C contrib -j\$(nproc) -s install DESTDIR=${STAGE} >> /tmp/bench-install.log 2>&1 || { tail -n 100 /tmp/bench-install.log; exit 1; }"
+
+        # ORCA needs Xerces-C at run time; ship it with the installation.
+        cp -a /usr/local/xerces-c/lib/libxerces-c* "${STAGE}${PREFIX}/lib/"
+        echo "${REPO} ${SHA}" > "${STAGE}${PREFIX}/BENCH_SOURCE"
+
+        tar -C "${STAGE}${PREFIX}" -czf "${OUT}" .
+        ls -lh "${OUT}"
+
+    - name: Cache the release build
+      if: ${{ matrix.version.release && steps.cache.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v6
+      with:
+        path: install/${{ matrix.version.name }}.tar.gz
+        key: tpcds-bench-${{ matrix.version.sha }}-${{ env.BUILD_RECIPE }}
+
+    - name: Upload the build
+      uses: actions/upload-artifact@v7
+      with:
+        name: tpcds-install-${{ matrix.version.name }}
+        path: install/${{ matrix.version.name }}.tar.gz
+        compression-level: 0
+        retention-days: 3
+
+  bench:
+    name: Benchmark
+    needs: [plan, build]
+    runs-on: ubuntu-22.04
+    # The script stops starting rounds 30 minutes before this.
+    timeout-minutes: 355
+    container:
+      image: apache/incubator-cloudberry:cbdb-build-rocky9-latest
+      # --privileged lets the script drop the page cache between runs.
+      options: >-
+        --privileged
+        --user root
+        --hostname cdw
+        --shm-size=2gb
+        --ulimit core=0
+        -v /usr/share:/host_usr_share
+        -v /usr/local:/host_usr_local
+        -v /opt:/host_opt
+    steps:
+    - name: Note the start time
+      run: echo "BENCH_DEADLINE=$(( $(date +%s) + 320 * 60 ))" >> "$GITHUB_ENV"
+
+    - name: Free disk space
+      run: |
+        rm -rf /host_opt/hostedtoolcache /host_usr_local/lib/android /host_usr_share/dotnet \
+               /host_opt/ghc /host_usr_local/.ghcup /host_usr_share/swift \
+               /host_usr_local/share/powershell /host_usr_local/share/chromium \
+               /host_usr_share/miniconda /host_opt/az /host_usr_share/sbt || true
+        df -h /
+        nproc
+        free -h
+
+    - name: Checkout cbdb_tpcds
+      uses: actions/checkout@v7
+      with:
+        repository: ${{ env.TPCDS_REPO }}
+        ref: ${{ env.TPCDS_REF }}
+        path: cbdb_tpcds
+
+    - name: Download the builds
+      uses: actions/download-artifact@v8
+      with:
+        pattern: tpcds-install-*
+        path: install
+        merge-multiple: true
+
+    - name: Run TPC-DS
+      env:
+        VERSIONS: ${{ needs.plan.outputs.versions }}
+        SCALE: ${{ needs.plan.outputs.scale }}
+        ROUNDS: ${{ needs.plan.outputs.rounds }}
+        OPTIMIZER: ${{ needs.plan.outputs.optimizer }}
+        QUERY_TIMEOUT: '1800'
+      shell: bash --noprofile --norc {0}
+      run: |
+        INSTALL_DIR="${GITHUB_WORKSPACE}/install"
+        TPCDS_SRC="${GITHUB_WORKSPACE}/cbdb_tpcds"
+        RESULTS_DIR="${GITHUB_WORKSPACE}/results"
+        DEADLINE="${BENCH_DEADLINE}"
+        # Each version gets its own cluster, because the catalog versions
+        # differ, and loads its own copy of the data. Only one cluster runs
+        # at a time. The rounds go through the versions in a rotated order,
+        # so that no version always runs first or last. A round that would
+        # not finish before DEADLINE is not started; the report then has
+        # fewer rounds for some versions. Errors are checked one by one, so
+        # this runs without -e.
+        #
+        # Output in RESULTS_DIR:
+        #   results.csv    version, round, query_id, status, duration_ms, rows
+        #   versions.tsv   name, source, version(), load seconds, database
+        #                  size, md5 of the generated queries
+        #   settings.txt   the server settings that matter for the comparison
+        #   progress.log   what happened when
+        su - gpadmin -c "/tmp/init_system.sh"
+        chown -R gpadmin:gpadmin cbdb_tpcds
+        # dsqgen is built with yacc, which the image does not have.
+        if ! command -v yacc > /dev/null; then
+          printf '#!/bin/sh\nexec bison -y "$@"\n' > /usr/local/bin/yacc
+          chmod +x /usr/local/bin/yacc
+        fi
+        set +e -uo pipefail
+
+        : "${VERSIONS:?}" "${INSTALL_DIR:?}" "${TPCDS_SRC:?}" "${RESULTS_DIR:?}"
+        : "${SCALE:=10}" "${ROUNDS:=2}" "${QUERY_TIMEOUT:=1800}" "${OPTIMIZER:=on}"
+        : "${DEADLINE:=$(( $(date +%s) + 5 * 3600 ))}"
+        : "${SEGMENTS:=$(nproc)}"
+
+        PREFIX=/usr/local/cloudberry-db
+        BENCH=/bench
+        DSG=${BENCH}/dsg
+        LOG=${RESULTS_DIR}/progress.log
+
+        mkdir -p "${RESULTS_DIR}" "${BENCH}"
+        chown gpadmin:gpadmin "${RESULTS_DIR}" "${BENCH}"
+        : > "${LOG}"
+        log() { echo "$(date -u +%FT%TZ) $*" | tee -a "${LOG}"; }
+        die() { log "ERROR: $*"; exit 1; }
+
+        as_gpadmin() { su - gpadmin -c "source ~/bench-env.sh; $1"; }
+        psql_bench() { as_gpadmin "psql -X -v ON_ERROR_STOP=1 -d bench $*"; }
+
+        # --- the versions ----------------------------------------------------
+
+        echo "${PREFIX}/lib" > /etc/ld.so.conf.d/cloudberry-bench.conf
+        if [ -e "${PREFIX}" ] && [ ! -L "${PREFIX}" ]; then
+          rm -rf "${PREFIX}"
+        fi
+        for v in ${VERSIONS}; do
+          [ -f "${INSTALL_DIR}/${v}.tar.gz" ] || die "no build for ${v}"
+          mkdir -p "/opt/cbdb/${v}"
+          tar -C "/opt/cbdb/${v}" -xzf "${INSTALL_DIR}/${v}.tar.gz"
+          chown -R gpadmin:gpadmin "/opt/cbdb/${v}"
+        done
+
+        CURRENT=""
+        # Makes ${PREFIX} point at version $1 and writes the environment file
+        # for its cluster. Does not start anything.
+        select_version() {
+          local v=$1
+          ln -sfn "/opt/cbdb/${v}" "${PREFIX}"
+          ldconfig
+          cat > /home/gpadmin/bench-env.sh << EOF
+        if [ -f ${PREFIX}/cloudberry-env.sh ]; then
+          source ${PREFIX}/cloudberry-env.sh
+        else
+          source ${PREFIX}/greenplum_path.sh
+        fi
+        export COORDINATOR_DATA_DIRECTORY=${BENCH}/${v}/coordinator/gpseg-1
+        export MASTER_DATA_DIRECTORY=${BENCH}/${v}/coordinator/gpseg-1
+        export PGPORT=5432 PGDATABASE=bench
+        EOF
+          chown gpadmin:gpadmin /home/gpadmin/bench-env.sh
+        }
+
+        stop_current() {
+          if [ -n "${CURRENT}" ]; then
+            as_gpadmin "gpstop -a -M fast" >> "${RESULTS_DIR}/gp-${CURRENT}.log" 2>&1
+          fi
+          pkill -x postgres 2> /dev/null
+          pkill -x gpfdist 2> /dev/null
+          sleep 2
+          rm -f /tmp/.s.PGSQL.*
+          CURRENT=""
+        }
+
+        start_version() {
+          local v=$1
+          [ "${CURRENT}" = "${v}" ] && return 0
+          stop_current
+          select_version "${v}"
+          as_gpadmin "gpstart -a" >> "${RESULTS_DIR}/gp-${v}.log" 2>&1
+          as_gpadmin "psql -X -d bench -Atc 'select 1'" > /dev/null 2>&1 || return 1
+          CURRENT=${v}
+        }
+
+        # Server settings. The memory settings are sized for a 4 CPU, 16 GB
+        # runner; the rest follows what the cbdb_tpcds extension recommends
+        # for TPC-DS, except that the optimizer is a parameter.
+        mem_kb=$(awk '/MemTotal/ { print $2 }' /proc/meminfo)
+        vmem_mb=$(( (mem_kb / 1024 - 3072) / SEGMENTS ))
+        cat > "${BENCH}/gucs.conf" << EOF
+        optimizer = ${OPTIMIZER}
+        gp_vmem_protect_limit = ${vmem_mb}
+        statement_mem = '$(( vmem_mb * 2 / 5 ))MB'
+        max_statement_mem = '$(( vmem_mb * 4 / 5 ))MB'
+        work_mem = '256MB'
+        autovacuum = off
+        gp_autostats_mode = none
+        gp_resqueue_memory_policy = eager_free
+        log_statement = none
+        EOF
+        cat > "${BENCH}/settings.sql" << 'EOF'
+        SELECT name || ' = ' || setting || coalesce(unit, '') FROM pg_settings
+         WHERE name IN ('optimizer', 'statement_mem', 'max_statement_mem', 'work_mem',
+                        'gp_vmem_protect_limit', 'gp_resqueue_memory_policy', 'autovacuum',
+                        'gp_autostats_mode', 'enable_parallel', 'shared_buffers')
+         ORDER BY 1;
+        SELECT count(*) || ' primary segments' FROM gp_segment_configuration
+         WHERE content >= 0 AND role = 'p';
+        EOF
+        chown gpadmin:gpadmin "${BENCH}/gucs.conf" "${BENCH}/settings.sql"
+
+        # --- set up and load each version ------------------------------------
+
+        log "versions: ${VERSIONS}; SF ${SCALE}, ${ROUNDS} round(s), ${SEGMENTS} segments, optimizer=${OPTIMIZER}"
+        log "deadline $(date -u -d "@${DEADLINE}" +%FT%TZ)"
+
+        # dsdgen and dsqgen are the same for every version; build them once.
+        su - gpadmin -c "cd ${TPCDS_SRC} && make build > ${RESULTS_DIR}/tpcds-build.log 2>&1" \
+          || die "building dsdgen failed"
+        # dsqgen overflows a fixed size buffer on a long template path, so it
+        # gets a short one.
+        rm -rf "${DSG}"
+        mkdir -p "${DSG}/tools" "${DSG}/query_templates"
+        tools=${TPCDS_SRC}/DSGen-software-code-4.0.0/tools
+        cp "${tools}/dsdgen" "${tools}/dsqgen" "${tools}/tpcds.idx" "${DSG}/tools/"
+        cp "${TPCDS_SRC}"/DSGen-software-code-4.0.0/query_templates/*.tpl "${DSG}/query_templates/"
+        chown -R gpadmin:gpadmin "${DSG}"
+
+        printf 'name\tsource\tversion\tload_seconds\tdb_size\tqueries_md5\n' > "${RESULTS_DIR}/versions.tsv"
+        for v in ${VERSIONS}; do
+          log "${v}: gpinitsystem"
+          stop_current
+          select_version "${v}"
+          dirs=$(for _ in $(seq "${SEGMENTS}"); do printf '%s ' "${BENCH}/${v}/primary"; done)
+          mkdir -p "${BENCH}/${v}/coordinator" "${BENCH}/${v}/primary"
+          cat > "${BENCH}/${v}/gpinit.conf" << EOF
+        SEG_PREFIX=gpseg
+        PORT_BASE=6000
+        declare -a DATA_DIRECTORY=(${dirs})
+        COORDINATOR_HOSTNAME=$(hostname)
+        MASTER_HOSTNAME=$(hostname)
+        COORDINATOR_DIRECTORY=${BENCH}/${v}/coordinator
+        MASTER_DIRECTORY=${BENCH}/${v}/coordinator
+        COORDINATOR_PORT=5432
+        MASTER_PORT=5432
+        TRUSTED_SHELL=ssh
+        ENCODING=UNICODE
+        DATABASE_NAME=bench
+        EOF
+          hostname > "${BENCH}/hostfile"
+          chown -R gpadmin:gpadmin "${BENCH}"
+          # gpinitsystem exits with 1 on warnings, so check the cluster instead.
+          as_gpadmin "gpinitsystem -a -c ${BENCH}/${v}/gpinit.conf -h ${BENCH}/hostfile -p ${BENCH}/gucs.conf" \
+            > "${RESULTS_DIR}/gpinit-${v}.log" 2>&1
+          as_gpadmin "psql -X -d bench -Atc 'select 1'" > /dev/null 2>&1 \
+            || { tail -n 40 "${RESULTS_DIR}/gpinit-${v}.log"; die "${v}: gpinitsystem failed"; }
+          CURRENT=${v}
+
+          log "${v}: install the extension, generate and load SF ${SCALE}"
+          as_gpadmin "cd ${TPCDS_SRC} && make install PG_CONFIG=${PREFIX}/bin/pg_config" \
+            > "${RESULTS_DIR}/tpcds-install-${v}.log" 2>&1 || die "${v}: installing the extension failed"
+          start=$(date +%s)
+          cat > "${BENCH}/load.sql" << EOF
+        CREATE EXTENSION tpcds;
+        SELECT tpcds.config('tpcds_dir', '${DSG}');
+        SELECT tpcds.gen_schema('aocs');
+        SELECT tpcds.gen_data(${SCALE}, $(nproc));
+        SELECT tpcds.load_data($(nproc));
+        SELECT tpcds.gen_query();
+        SELECT tpcds.clean_data();
+        EOF
+          chmod 644 "${BENCH}/load.sql"
+          psql_bench "-f ${BENCH}/load.sql" > "${RESULTS_DIR}/load-${v}.log" 2>&1 \
+            || { tail -n 40 "${RESULTS_DIR}/load-${v}.log"; die "${v}: loading failed"; }
+          load_s=$(( $(date +%s) - start ))
+          nq=$(psql_bench "-Atc 'select count(*) from tpcds.query'")
+          [ "${nq}" = 99 ] || die "${v}: ${nq} queries generated instead of 99"
+          printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${v}" \
+            "$(cat "${PREFIX}/BENCH_SOURCE")" \
+            "$(psql_bench "-Atc 'select version()'" | tr '\t\n' '  ')" \
+            "${load_s}" \
+            "$(psql_bench "-Atc \"select pg_size_pretty(pg_database_size('bench'))\"")" \
+            "$(psql_bench "-Atc 'select md5(string_agg(query_text, chr(10) order by query_id)) from tpcds.query'")" \
+            >> "${RESULTS_DIR}/versions.tsv"
+          echo "== ${v}" >> "${RESULTS_DIR}/settings.txt"
+          psql_bench "-At -f ${BENCH}/settings.sql" >> "${RESULTS_DIR}/settings.txt" 2>&1
+          log "${v}: loaded in ${load_s}s"
+        done
+
+        if [ "$(cut -f6 "${RESULTS_DIR}/versions.tsv" | tail -n +2 | sort -u | wc -l)" -ne 1 ]; then
+          log "WARNING: the versions generated different query texts; see versions.tsv"
+        fi
+
+        # --- the rounds ------------------------------------------------------
+
+        echo "version,round,query_id,status,duration_ms,rows_returned" > "${RESULTS_DIR}/results.csv"
+        read -r -a order <<< "${VERSIONS}"
+        n=${#order[@]}
+        declare -A last_run
+        stopped=""
+        for round in $(seq "${ROUNDS}"); do
+          for i in $(seq 0 $(( n - 1 ))); do
+            v=${order[$(( (i + round - 1) % n ))]}
+            # Leave room for the longest run seen so far plus a margin.
+            need=$(( ${last_run[${v}]:-0} * 6 / 5 + 300 ))
+            if [ $(( $(date +%s) + need )) -gt "${DEADLINE}" ]; then
+              stopped="round ${round} not finished: out of time before ${v}"
+              break 2
+            fi
+            start_version "${v}" || die "${v}: cluster did not start"
+            sync
+            echo 3 > /proc/sys/vm/drop_caches 2> /dev/null || true
+            log "round ${round}: ${v}"
+            start=$(date +%s)
+            psql_bench "-c 'SELECT tpcds.bench(${QUERY_TIMEOUT})'" > "${RESULTS_DIR}/bench-${v}-${round}.log" 2>&1 \
+              || { tail -n 20 "${RESULTS_DIR}/bench-${v}-${round}.log"; die "${v}: bench failed"; }
+            last_run[${v}]=$(( $(date +%s) - start ))
+            psql_bench "-Atc \"copy (select '${v}', ${round}, query_id, status, duration_ms, rows_returned
+              from tpcds.bench_summary order by query_id) to stdout with (format csv)\"" >> "${RESULTS_DIR}/results.csv" \
+              || die "${v}: exporting the results failed"
+            log "round ${round}: ${v} done in ${last_run[${v}]}s"
+          done
+        done
+        stop_current
+        [ -n "${stopped}" ] && log "${stopped}"
+        log "done"
+
+    - name: Write the report
+      if: ${{ !cancelled() }}
+      env:
+        BASELINE: ${{ needs.plan.outputs.baseline }}
+        CANDIDATE: ${{ needs.plan.outputs.candidate }}
+        RC: ${{ needs.plan.outputs.rc }}
+        SCALE: ${{ needs.plan.outputs.scale }}
+        OPTIMIZER: ${{ needs.plan.outputs.optimizer }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        set -eo pipefail
+        [ -f results/results.csv ] || { echo "no results"; exit 1; }
+        [ "${OPTIMIZER}" = on ] && opt=GPORCA || opt="Postgres planner"
+        segs=$(grep -m1 'primary segments' results/settings.txt || echo 'unknown number of primary segments')
+        context="TPC-DS scale factor ${SCALE}, ${opt}, on one GitHub-hosted runner ($(nproc) CPUs, $(free -g | awk '/Mem:/ {print $2}') GB of memory); each version has its own cluster with ${segs} and no mirrors. Each query time is the median of the rounds. These are not TPC-DS results in the sense of the TPC rules. [Workflow run](${RUN_URL})"
+        if [ -n "${RC}" ]; then
+          cands=(--candidate "${RC}" --candidate "${CANDIDATE}")
+          title="TPC-DS benchmark $(date -u +%F): ${CANDIDATE} and ${RC} vs ${BASELINE}"
+        else
+          cands=(--candidate "${CANDIDATE}")
+          title="TPC-DS benchmark $(date -u +%F): ${CANDIDATE} vs ${BASELINE}"
+        fi
+        python3 - results --baseline "${BASELINE}" "${cands[@]}" \
+          --title "${title}" --context "${context}" > /dev/null << 'PY'
+        """Turns the output of the Run TPC-DS step into a Markdown report.
+
+            python3 - RESULTS_DIR --baseline NAME --candidate NAME
+                      [--candidate NAME ...] [options]
+
+        Writes RESULTS_DIR/report.md and RESULTS_DIR/report.json. Each query's
+        time is the median over the rounds of a version. Totals and geometric
+        means use only the queries that returned OK in every round of every
+        version, so that a failed query does not make a version look faster.
+
+        The report compares every pair of versions: each version with the
+        one before it, a matrix of all pairs, and the queries that changed
+        in each pair. Each candidate (main, and a release candidate if there
+        is one) is also compared with the baseline, the latest release, in
+        the summary at the top. The report is
+        "notable" when a candidate is slower than the baseline by more than
+        --total-threshold in total, or when a query is slower by more than
+        --query-threshold and by more than --min-seconds. These are the
+        conditions for posting it.
+        """
+
+        import argparse
+        import csv
+        import json
+        import math
+        import os
+        import statistics
+        import sys
+
+
+        def pct(new, old):
+            v = (new / old - 1) * 100
+            sign = "+" if v > 0.05 else "−" if v < -0.05 else "±"
+            return f"{sign}{abs(v):.1f}%"
+
+
+        def main():
+            ap = argparse.ArgumentParser()
+            ap.add_argument("results_dir")
+            ap.add_argument("--baseline", required=True, help="latest release")
+            ap.add_argument("--candidate", required=True, action="append",
+                            help="main, a release candidate; may be repeated")
+            ap.add_argument("--total-threshold", type=float, default=5.0)
+            ap.add_argument("--query-threshold", type=float, default=20.0)
+            ap.add_argument("--min-seconds", type=float, default=5.0)
+            ap.add_argument("--title", default="TPC-DS benchmark")
+            ap.add_argument("--context", default="", help="Markdown inserted after the title")
+            a = ap.parse_args()
+
+            d = a.results_dir
+            with open(os.path.join(d, "versions.tsv")) as f:
+                versions = list(csv.DictReader(f, delimiter="\t"))
+            names = [v["name"] for v in versions]
+            rows = []
+            with open(os.path.join(d, "results.csv")) as f:
+                rows = list(csv.DictReader(f))
+
+            # times[version][query] = [ms per round]; bad[version] = queries not OK
+            times = {n: {} for n in names}
+            bad = {n: {} for n in names}
+            rounds = {n: set() for n in names}
+            for r in rows:
+                v, q = r["version"], int(r["query_id"])
+                if v not in times:
+                    continue
+                rounds[v].add(int(r["round"]))
+                if r["status"] == "OK":
+                    times[v].setdefault(q, []).append(float(r["duration_ms"]) / 1000)
+                else:
+                    bad[v][q] = r["status"]
+
+            ran = [n for n in names if rounds[n]]
+            queries = sorted({q for n in ran for q in times[n]} | {q for n in ran for q in bad[n]})
+            common = [q for q in queries
+                      if all(q in times[n] and q not in bad[n] for n in ran)]
+            med = {n: {q: statistics.median(ts) for q, ts in times[n].items()} for n in ran}
+            total = {n: sum(med[n][q] for q in common) for n in ran}
+
+            base = a.baseline
+            cands = [c for c in a.candidate if c != base]
+            complete = base in ran and all(c in ran for c in cands)
+
+            # changed[c] = [(query, baseline s, candidate s)], most slowed first
+            changed, total_change, slower = {}, {}, {}
+            for c in cands:
+                if base not in ran or c not in ran:
+                    continue
+                changed[c] = sorted(
+                    [(q, med[base][q], med[c][q]) for q in common
+                     if abs(med[c][q] - med[base][q]) >= a.min_seconds
+                     and abs(med[c][q] / med[base][q] - 1) * 100 >= a.query_threshold],
+                    key=lambda t: t[2] / t[1], reverse=True)
+                total_change[c] = (total[c] / total[base] - 1) * 100
+                slower[c] = [t for t in changed[c] if t[2] > t[1]]
+            notable = any(total_change[c] > a.total_threshold or slower[c] for c in changed)
+
+            out = []
+            w = out.append
+            w(f"# {a.title}\n")
+            if a.context:
+                w(a.context.rstrip() + "\n")
+            if not complete:
+                missing = [n for n in [base] + cands if n not in ran]
+                w("**Incomplete:** no results for " + ", ".join(f"`{n}`" for n in missing)
+                  + "; see the job log.\n")
+            for c in changed:
+                line = (f"- `{c}` is **{pct(total[c], total[base])}** against `{base}` in total "
+                        f"over {len(common)} queries")
+                if slower[c]:
+                    k = len(slower[c])
+                    line += f"; {k} quer{'y is' if k == 1 else 'ies are'} slower beyond the threshold"
+                w(line + ".")
+            if changed:
+                w("")
+
+            def ratio(new, old):
+                """Geometric mean of the per-query ratios new/old."""
+                if not common:
+                    return float("nan")
+                return math.exp(statistics.mean(
+                    math.log(med[new][q] / med[old][q]) for q in common))
+
+            def moved(old, new):
+                """Queries that changed beyond the thresholds, most slowed first."""
+                return sorted(
+                    [(q, med[old][q], med[new][q]) for q in common
+                     if abs(med[new][q] - med[old][q]) >= a.min_seconds
+                     and abs(med[new][q] / med[old][q] - 1) * 100 >= a.query_threshold],
+                    key=lambda t: t[2] / t[1], reverse=True)
+
+            # Each version against the one before it, so that a change shows up
+            # in the release that made it.
+            w("| Version | Rounds | Total (s) | vs previous | Geomean vs previous | Not OK |")
+            w("|---|---|---|---|---|---|")
+            prev = None
+            for n in names:
+                if n not in ran:
+                    w(f"| `{n}` | 0 | | | | not run |")
+                    continue
+                vs = pct(total[n], total[prev]) if prev else "—"
+                g = f"{ratio(n, prev):.3f}" if prev else "—"
+                nb = ", ".join(f"Q{q} {s}" for q, s in sorted(bad[n].items())) or "0"
+                w(f"| `{n}` | {len(rounds[n])} | {total[n]:.1f} | {vs} | {g} | {nb} |")
+                prev = n
+            w("")
+
+            # Every pair of versions, the older one in the row: the change in
+            # total time and the geometric mean of the per-query ratios.
+            pairs = [(o, n) for i, o in enumerate(ran) for n in ran[i + 1:]]
+            if pairs:
+                w("### Version to version\n")
+                w("Change in total time, and the geometric mean of the per-query "
+                  "time ratios, from the version in the row to the version in the "
+                  "column. Below 1.000 is faster.\n")
+                w("| From \\ to | " + " | ".join(f"`{n}`" for n in ran[1:]) + " |")
+                w("|---|" + "---|" * (len(ran) - 1))
+                for i, o in enumerate(ran[:-1]):
+                    cells = ["" for _ in ran[1:i + 1]]
+                    cells += [f"{pct(total[n], total[o])} · {ratio(n, o):.3f}" for n in ran[i + 1:]]
+                    w(f"| `{o}` | " + " | ".join(cells) + " |")
+                w("")
+
+            # The queries behind each pair.
+            w("### Queries that changed\n")
+            w(f"More than {a.query_threshold:g}% and more than {a.min_seconds:g} s, "
+              "median of the rounds.\n")
+            for o, n in pairs:
+                rows_p = moved(o, n)
+                up = sum(1 for _, x, y in rows_p if y > x)
+                down = len(rows_p) - up
+                # The pairs of the latest release with a candidate are open,
+                # the others folded; a pair without changes is one line.
+                # Markdown is not rendered inside <summary>, so use <code>.
+                tail = f" → {{}}: {down} faster, {up} slower"
+                if not rows_p:
+                    w(f"- `{o}`" + tail.format(f"`{n}`") + "\n")
+                    continue
+                folded = not (o == base and n in cands)
+                if folded:
+                    w(f"<details>\n<summary><code>{o}</code>"
+                      + tail.format(f"<code>{n}</code>") + "</summary>\n")
+                else:
+                    w(f"**`{o}`" + tail.format(f"`{n}`") + "**\n")
+                w(f"| Query | `{o}` (s) | `{n}` (s) | Change |")
+                w("|---|---|---|---|")
+                for q, x, y in rows_p:
+                    w(f"| Q{q} | {x:.2f} | {y:.2f} | {pct(y, x)} |")
+                w("")
+                if folded:
+                    w("</details>\n")
+
+            w("<details>\n<summary>All queries, median time in seconds</summary>\n")
+            w("| Query | " + " | ".join(f"`{n}`" for n in ran) + " |")
+            w("|---|" + "---|" * len(ran))
+            for q in queries:
+                cells = []
+                for n in ran:
+                    if q in bad[n]:
+                        cells.append(bad[n][q])
+                    elif q in med[n]:
+                        cells.append(f"{med[n][q]:.2f}")
+                    else:
+                        cells.append("")
+                w(f"| Q{q} | " + " | ".join(cells) + " |")
+            w("\n</details>\n")
+
+            w("<details>\n<summary>Versions</summary>\n")
+            w("| Version | Source | Load (s) | Database size | `version()` |")
+            w("|---|---|---|---|---|")
+            for v in versions:
+                repo, _, sha = v["source"].partition(" ")
+                src = f"[`{sha[:10]}`](https://github.com/{repo}/commit/{sha})" if sha else v["source"]
+                w(f"| `{v['name']}` | {src} | {v['load_seconds']} | {v['db_size']} | {v['version'][:120]} |")
+            md5s = {v["queries_md5"] for v in versions}
+            if len(md5s) > 1:
+                w("\n**Warning:** the versions generated different query texts.")
+            w("\n</details>\n")
+
+            with open(os.path.join(d, "report.md"), "w") as f:
+                f.write("\n".join(out))
+            with open(os.path.join(d, "report.json"), "w") as f:
+                json.dump({
+                    "baseline": base, "candidates": cands, "complete": complete,
+                    "notable": notable, "total_change_pct": total_change,
+                    "slower_queries": {c: [q for q, _, _ in v] for c, v in slower.items()},
+                    "totals": total, "rounds": {n: len(rounds[n]) for n in names},
+                }, f, indent=2)
+            print("\n".join(out))
+            return 0
+
+
+        if __name__ == "__main__":
+            sys.exit(main())
+        PY
+        cat results/report.md >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload the results
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: tpcds-results
+        path: |
+          results/
+          /bench/*/coordinator/gpseg-1/log/
+        retention-days: 30
+
+  publish:
+    name: Publish
+    needs: [plan, bench]
+    runs-on: ubuntu-22.04
+    if: ${{ github.repository == 'apache/cloudberry' && (github.event_name == 'schedule' || inputs.publish) }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      discussions: write
+    steps:
+    - name: Download the results
+      uses: actions/download-artifact@v8
+      with:
+        name: tpcds-results
+        path: results
+
+    - name: Post the report
+      env:
+        GH_TOKEN: ${{ github.token }}
+        BASELINE: ${{ needs.plan.outputs.baseline }}
+        RC: ${{ needs.plan.outputs.rc }}
+        EVENT: ${{ github.event_name }}
+        # Name of the Discussions category to post to.
+        CATEGORY: Q&A
+      run: |
+        set -euo pipefail
+        report=results/report.md
+        [ -f results/report.json ] && [ "$(jq -r .complete results/report.json)" = true ] \
+          || { echo "The report is incomplete, not posting it"; exit 0; }
+
+        owner=${GITHUB_REPOSITORY%/*}; name=${GITHUB_REPOSITORY#*/}
+        reason=""
+        if [ "${EVENT}" = workflow_dispatch ]; then
+          reason="requested"
+        elif [ "$(jq -r .notable results/report.json)" = true ]; then
+          reason="main or the release candidate is slower than ${BASELINE}"
+        else
+          # The first weekly run after a release, or after a new release
+          # candidate, posts the report.
+          posted() {
+            gh api graphql -f q="repo:${GITHUB_REPOSITORY} in:title \"TPC-DS benchmark\" \"$1\"" \
+              -f query='query($q: String!) { search(query: $q, type: DISCUSSION, first: 1) { discussionCount } }' \
+              --jq .data.search.discussionCount
+          }
+          if [ -n "${RC}" ] && [ "$(posted "${RC}")" = 0 ]; then
+            reason="first report for ${RC}"
+          elif [ "$(posted "${BASELINE}")" = 0 ]; then
+            reason="first report for ${BASELINE}"
+          fi
+        fi
+        if [ -z "${reason}" ]; then
+          echo "Nothing notable; the report is in the job summary of the Benchmark job."
+          exit 0
+        fi
+
+        ids=$(gh api graphql -f owner="${owner}" -f name="${name}" -f query='
+          query($owner: String!, $name: String!) {
+            repository(owner: $owner, name: $name) {
+              id
+              discussionCategories(first: 50) { nodes { id name } }
+            }
+          }')
+        repo_id=$(jq -r .data.repository.id <<< "${ids}")
+        cat_id=$(jq -r --arg c "${CATEGORY}" '.data.repository.discussionCategories.nodes[] | select(.name == $c) | .id' <<< "${ids}")
+        [ -n "${cat_id}" ] || { echo "::error::no Discussions category '${CATEGORY}'"; exit 1; }
+
+        title=$(head -n 1 "${report}" | sed 's/^# //')
+        body=$(tail -n +2 "${report}")
+        url=$(gh api graphql -f repo="${repo_id}" -f cat="${cat_id}" -f title="${title}" -f body="${body}" -f query='
+          mutation($repo: ID!, $cat: ID!, $title: String!, $body: String!) {
+            createDiscussion(input: {repositoryId: $repo, categoryId: $cat, title: $title, body: $body}) {
+              discussion { url }
+            }
+          }' --jq .data.createDiscussion.discussion.url)
+        echo "Posted (${reason}): ${url}" | tee -a "$GITHUB_STEP_SUMMARY"

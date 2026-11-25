@@ -40,6 +40,7 @@ This directory contains GitHub Actions workflows for Apache Cloudberry CI/CD.
 | `coverity.yml` | Static code analysis with Coverity | Weekly, Manual |
 | `sonarqube.yml` | Code quality analysis with SonarQube | Push to main |
 | `sqlancer-cloudberry.yml` | Fuzzing with SQLancer on a debug build | Push, PR, Manual |
+| `tpcds-benchmark.yml` | TPC-DS on the releases since 2.0 and main, on one runner; posts to Discussions when main is slower | Weekly, Manual |
 | `docker-cbdb-build-containers.yml` | Build Docker images for CI | Manual |
 | `docker-cbdb-test-containers.yml` | Build test Docker images | Manual |
 
