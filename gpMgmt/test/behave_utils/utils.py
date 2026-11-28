@@ -794,29 +794,49 @@ def escape_string(string, conn):
     return pg.DB(db=conn).escape_string(string)
 
 
-def wait_for_unblocked_transactions(context, num_retries=150):
+def wait_for_unblocked_transactions(context, num_retries=150,
+                                     attempt_timeout=10):
     """
     Tries once a second to successfully commit a transaction to the database
-    running on PGHOST/PGPORT. Raises an Exception after failing <num_retries>
-    times.
+    running on PGHOST/PGPORT. Raises an Exception after <num_retries> failed
+    attempts, or when the attempts take longer than <num_retries> seconds in
+    total.
+
+    Cloudberry: an attempt can block instead of fail. For example, when the
+    address of a primary is invalid_host and its mirror is down, FTS cannot
+    fail over. Then each new backend waits in InitPostgres() for FTS for
+    about two minutes before it fails, so 150 attempts take about five hours.
+    Thus each attempt has a connect timeout and a statement timeout of
+    <attempt_timeout> seconds, and the loop has an overall time limit.
     """
+    start = time.time()
+    deadline = start + num_retries
     attempt = 0
-    while attempt < num_retries:
+    last_error = None
+    while True:
         try:
-            with closing(dbconn.connect(dbconn.DbURL(), unsetSearchPath=False)) as conn:
+            dburl = dbconn.DbURL(timeout=attempt_timeout, retries=1)
+            with closing(dbconn.connect(dburl, unsetSearchPath=False,
+                                        logConn=False)) as conn:
                 # Cursor.execute() will issue an implicit BEGIN for us.
                 # Empty block of 'BEGIN' and 'END' won't start a distributed transaction,
                 # execute a DDL query to start a distributed transaction.
+                conn.cursor().execute("SET statement_timeout = '%ds'"
+                                      % attempt_timeout)
                 conn.cursor().execute('CREATE TEMP TABLE temp_test(a int)')
                 conn.cursor().execute('COMMIT')
-                break
+                return
         except Exception as e:
             attempt += 1
-            pass
+            last_error = e
+
+        if attempt >= num_retries or time.time() >= deadline:
+            break
         time.sleep(1)
 
-    if attempt == num_retries:
-        raise Exception('Unable to establish a connection to database !!!')
+    raise Exception('Unable to establish a connection to database !!! '
+                    '(%d failed attempts in %d seconds, last error: %s)'
+                    % (attempt, time.time() - start, last_error))
 
 
 def wait_for_desired_query_result(dburl, query, desired_result, utility=False):
