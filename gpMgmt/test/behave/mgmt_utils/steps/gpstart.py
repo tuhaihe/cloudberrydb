@@ -243,10 +243,44 @@ def impl(context):
     context.execute_steps("""
     When the user runs "gprecoverseg -a"
     Then gprecoverseg should return a return code of 0
-    And all the segments are running
-    And the segments are synchronized
+    """)
+    wait_for_segments_up_and_synchronized()
+    context.execute_steps("""
     When the user runs "gprecoverseg -a -r"
     Then gprecoverseg should return a return code of 0
-    And all the segments are running
-    And the segments are synchronized
     """)
+    wait_for_segments_up_and_synchronized()
+
+
+def wait_for_segments_up_and_synchronized(timeout=600, interval=5):
+    """
+    Cloudberry: gprecoverseg can return before FTS marks a recovered mirror
+    up. On a loaded host the mirror can still be status 'd' when gprecoverseg
+    exits, so an immediate check fails, and every later scenario in the
+    feature fails the same way. Ask FTS to probe and check again until all
+    segments are up and synchronized, or until <timeout> seconds pass.
+    """
+    deadline = time.time() + timeout
+    while True:
+        try:
+            if utils.are_segments_running() and \
+                    utils.are_segments_synchronized():
+                return
+        except Exception as e:
+            print("could not read the segment configuration: %s" % e)
+
+        if time.time() >= deadline:
+            break
+        try:
+            utils.trigger_fts_probe()
+        except Exception as e:
+            print("could not request an FTS probe: %s" % e)
+        time.sleep(interval)
+
+    # Run the original checks one more time, so that the failure message
+    # names the segments that are not up or not synchronized.
+    if not utils.are_segments_running():
+        raise Exception("all segments are not currently running after %d "
+                        "seconds" % timeout)
+    if not utils.are_segments_synchronized():
+        raise Exception("segments are not in sync after %d seconds" % timeout)
