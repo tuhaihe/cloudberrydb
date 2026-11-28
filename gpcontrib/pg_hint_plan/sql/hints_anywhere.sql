@@ -1,4 +1,5 @@
 LOAD 'pg_hint_plan';
+SET optimizer TO off; -- CBDB: test the Postgres planner
 SET client_min_messages TO log;
 \set SHOW_CONTEXT always
 SET pg_hint_plan.debug_print TO on;

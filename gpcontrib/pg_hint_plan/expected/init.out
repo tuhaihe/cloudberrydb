@@ -259,13 +259,16 @@ SELECT * FROM settings;
  optimizer_enable_dynamicindexscan                    | on          | Query Tuning / Planner Method Configuration
  optimizer_enable_right_outer_join                    | on          | Query Tuning / Planner Method Configuration
  optimizer_force_three_stage_scalar_dqa               | on          | Query Tuning / Planner Method Configuration
+ optimizer_jit_above_cost                             | -1          | Query Tuning / Planner Cost Constants
+ optimizer_jit_inline_above_cost                      | -1          | Query Tuning / Planner Cost Constants
+ optimizer_jit_optimize_above_cost                    | -1          | Query Tuning / Planner Cost Constants
  optimizer_join_arity_for_associativity_commutativity | 18          | Query Tuning / Planner Method Configuration
  optimizer_join_order_threshold                       | 10          | Query Tuning / Planner Method Configuration
  optimizer_metadata_caching                           | on          | Query Tuning / Planner Method Configuration
  optimizer_penalize_broadcast_threshold               | 100000      | Query Tuning / Planner Method Configuration
  optimizer_push_group_by_below_setop_threshold        | 10          | Query Tuning / Planner Method Configuration
  parallel_query_use_streaming_hashagg                 | on          | Query Tuning / Planner Method Configuration
-(88 rows)
+(91 rows)
 
 ANALYZE;
 reset optimizer;
